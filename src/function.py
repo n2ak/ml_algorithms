@@ -1,20 +1,20 @@
 from abc import ABC , abstractmethod
+
+from .core import HasForwardAndIsCallable
 from .utils import relu,sigmoid,softmax
 
-class Function(ABC):
-    @abstractmethod
-    def __call__():
-        raise 'Unimplimented'
+class Function(HasForwardAndIsCallable,ABC):
+    pass
 
 class RelU(Function):
-    def __call__(self,x):
+    def forward(self,x):
         return relu(x)
 class Sigmoid(Function):
-    def __call__(self,x):
+    def forward(self,x):
         return sigmoid(x)
 class Softmax(Function):
     def __init__(self,dim=None) -> None:
         super().__init__()
         self.dim = dim or 0
-    def __call__(self,x):
+    def forward(self,x):
         return softmax(x,dim=self.dim)

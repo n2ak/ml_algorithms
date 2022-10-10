@@ -1,16 +1,11 @@
-from abc import ABC , abstractclassmethod
+from abc import ABC
 from typing import List, overload
-
+from .core import HasForwardAndIsCallable
 from .tensor import Tensor
 
 
-class Layer(ABC):
+class Layer(HasForwardAndIsCallable,ABC):
 
-    def forward(self):
-        raise "Unimplimented"
-
-    def __call__(self,*args):
-        return self.forward(*args)
     @classmethod
     def init_weights(cls,in_,out_,weights:Tensor=None):
         if weights is None:
@@ -45,13 +40,8 @@ def linear(a:Tensor,w:Tensor,b:Tensor=None):
         assert b.shape[-1] == w.shape[-1]
         res += b
     return  res
-class Module(ABC):
-    @abstractclassmethod
-    def forward():
-        raise "Unimplimented"
-    def __call__(self,x):
-        return self.forward(x)
-class Sequential(Module):
+    
+class Sequential(HasForwardAndIsCallable):
     def __init__(self,layers:List[Layer]=[]) -> None:
         super().__init__()
 
