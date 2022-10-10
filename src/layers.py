@@ -1,7 +1,7 @@
 from abc import ABC , abstractclassmethod
 from typing import List, overload
 
-from tensor import Tensor
+from .tensor import Tensor
 
 
 class Layer(ABC):

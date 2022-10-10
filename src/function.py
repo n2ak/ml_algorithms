@@ -1,5 +1,6 @@
 from abc import ABC , abstractmethod
-import utils
+from .utils import relu,sigmoid,softmax
+
 class Function(ABC):
     @abstractmethod
     def __call__():
@@ -7,13 +8,13 @@ class Function(ABC):
 
 class RelU(Function):
     def __call__(self,x):
-        return utils.relu(x)
+        return relu(x)
 class Sigmoid(Function):
     def __call__(self,x):
-        return utils.sigmoid(x)
+        return sigmoid(x)
 class Softmax(Function):
     def __init__(self,dim=None) -> None:
         super().__init__()
         self.dim = dim or 0
     def __call__(self,x):
-        return utils.softmax(x,dim=self.dim)
+        return softmax(x,dim=self.dim)

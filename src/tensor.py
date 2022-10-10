@@ -1,7 +1,7 @@
 import numpy as np
-from core import AddGradFn
+from .core import AddGradFn
 
-from utils import is_scalar, relu
+from .utils import is_scalar, relu
 
 class Tensor(np.ndarray):
     def __init__(self) -> None:

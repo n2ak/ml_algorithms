@@ -1,7 +1,7 @@
 import sys, os
 myPath = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, myPath + '/../src')
-
+import numpy as np
 from .. import *
 
 def test_tensor():

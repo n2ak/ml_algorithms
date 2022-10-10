@@ -16,7 +16,7 @@ def test_softmax():
     x = np.random.randint(10,size=(10,29,30)).astype(np.float32)
     for dim in range(len(x.shape)):
         comp(x,torch.nn.Softmax(dim=dim),Softmax(dim=dim),print_ok=False)
-
+@pytest.mark.skip(reason="")
 def test_softmax():
     x = np.random.randint(10,size=(10,29,30)).astype(np.float32)
     comp(x,torch.nn.CrossEntropyLoss(),CrossEntropyLoss(),print_ok=False)
