@@ -1,7 +1,8 @@
 import numpy as np
 from .core import AddGradFn
 
-from .utils import is_scalar, relu
+from .utils import cross_entropy, is_scalar, linear, log_softmax, negative_log_likelihood, relu, sequential, sigmoid, softmax
+
 
 class Tensor(np.ndarray):
     def __init__(self) -> None:
@@ -9,7 +10,6 @@ class Tensor(np.ndarray):
 
         self.grad = None
         self.grad_fn = None
-
     def array(arr,dtype=np.float32):
         arr = np.array(arr,dtype=dtype)
         return arr.view(Tensor)
@@ -34,5 +34,28 @@ class Tensor(np.ndarray):
     @classmethod
     def zeros(cls,*args): return Tensor.array(np.zeros(*args))
 
-    def relu(self): return relu(self)
-    def exp(self): return Tensor.array(np.exp(self))
+
+    # @classmethod
+    
+def bind():
+    def _bind(cls,func):
+        return setattr(cls,func.__name__,lambda self,*args,**kwargs: func(self,*args,**kwargs))
+    methods = [
+        np.exp,
+        np.log,
+        np.unique,
+        linear,
+        relu,
+        sigmoid,
+        sequential,
+        softmax,
+        log_softmax,
+        negative_log_likelihood,
+        cross_entropy,
+    ]
+    print("Bound to numpy")
+    for method in methods:
+        _bind(Tensor,method)
+bind()
+
+

@@ -23,23 +23,14 @@ class Dense(Layer):
         self.weights = self.init_weights(self.in_ , self.out_)
         
     def forward(self,x:Tensor):
-        return linear(x,self.weights,self.bias)
+        return x.linear(self.weights,self.bias)
     @classmethod
     def from_weights(cls,weights,bias=True):
         layer = Dense(*weights.shape,bias=bias)
         layer.weights = weights
         return layer
 
-def linear(a:Tensor,w:Tensor,b:Tensor=None):
-    """
-    returns a*w+b
-    """
-    assert a.shape[-1] == w.shape[0]
-    res = a @ w
-    if b is not None:
-        assert b.shape[-1] == w.shape[-1]
-        res += b
-    return  res
+
     
 class Sequential(HasForwardAndIsCallable):
     def __init__(self,layers:List[Layer]=[]) -> None:
@@ -49,8 +40,6 @@ class Sequential(HasForwardAndIsCallable):
     def add_layer(self,layer:Layer):
         self.layers.append(layer)
     def forward(self,x):
-        for layer in self.layers:
-            x = layer(x)
-        return x
+        return x.sequential(self.layers)
 
     
