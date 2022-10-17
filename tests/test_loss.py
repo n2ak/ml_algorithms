@@ -2,7 +2,7 @@ from tests.utils import comp
 from .. import *
 import pytest
 
-# @pytest.mark.skip("")
+
 def test_crossentropyloss():
     import torch
     x = torch.rand(30,10)

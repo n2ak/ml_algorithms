@@ -22,6 +22,7 @@ def log_softmax(tensor,dim=0):
     
 def cross_entropy(x,t,dim=0,reduction="none",from_logits=False):
     # if from_logits:
+    #     TODO : from_logits is True
     #     t = t.flatten().astype(np.int32)
     return x.log_softmax(dim).negative_log_likelihood(t,reduction=reduction)
 
@@ -47,7 +48,21 @@ def negative_log_likelihood(x,t,reduction="none"):
         return lns.sum()
     elif reduction == "mean":
         return lns.mean()
+def conv2d_output_shape(x,out_,ks,p=0,s=1,d=0):
+    b,_,w,h = tuple(x.shape)
+    s1,s2 = s if isinstance(s,tuple) else (s,s)
+    p1,p2 = p if isinstance(p,tuple) else (p,p)
+    d1,d2 = d if isinstance(d,tuple) else (d,d)
+    ks1,ks2 = ks
+    from math import ceil
+    # w,h = (w-ks1+p1+s1)/s1,(h-ks2+p2+s2)/s2
+    # w = ceil(w) if w - int(w) < .5 else ceil(w)+1
+    # h = ceil(h) if h - int(h) < .5 else ceil(h)+1
 
+    w = (w+2*p1-d1*(ks1-1)-1)//s1 + 1
+    h = (h+2*p2-d2*(ks2-1)-1)//s2 + 1
+    out_shape = b,out_,w,h
+    return out_shape
 def linear(a,w,b):
     """
     returns a*w+b
@@ -56,11 +71,17 @@ def linear(a,w,b):
     res = a @ w
     if b is not None:
         assert b.shape[-1] == w.shape[-1]
-        res += b
-    return  res
+    return res.biased(b)
 
+def biased(x,bias=None):
+    if bias is not None:
+        assert tuple(x.shape) == tuple(bias.shape)
+        x += bias
+    return x
 def sequential(x,layers):
     for layer in layers:
         x = layer(x)
     return x
 
+def conv2d(x,w,b,padding=0,stride=1,dilation=0):
+    pass
