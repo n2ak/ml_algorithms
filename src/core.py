@@ -16,11 +16,11 @@ def jacobian(function,):
 class HasForwardAndIsCallable(ABC):
     @abstractmethod
     def forward(self,*args,**kwargs):
-        raise "Unimplemented"
+        raise Exception("Unimplemented")
 
     def __call__(self,*args,**kwargs):
         return self.forward(*args,**kwargs)
 
 def _backward(gradient,tensor):
     grad_fn = tensor.grad_fn
-    raise "Unimplemented"
+    raise Exception("Unimplemented")

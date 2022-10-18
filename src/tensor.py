@@ -1,6 +1,6 @@
 from typing import List
 import numpy as np
-from .grad import AddGradFn, ExpGradFn, GradFn, IdentityGradFn, MeanGradFn, MulGradFn, SubGradFn, SumGradFn
+from .grad import AddGradFn, DivGradFn, ExpGradFn, GradFn, IdentityGradFn, MeanGradFn, MulGradFn, PowGradFn, SubGradFn, SumGradFn
 
 from .utils import biased, cross_entropy, is_scalar, linear, log_softmax, negative_log_likelihood, relu, sequential, sigmoid, softmax
 
@@ -44,11 +44,11 @@ class Tensor(np.ndarray):
         if self.is_a_leaf() and self.grad_fn is None:
             self.grad_fn = IdentityGradFn([self])
         if self.grad_fn is None:
-            raise "No grad function"
+            raise Exception("No grad function")
         if self.requires_grad == False:
-            raise "Tensor must require grad to perform this operation"
+            raise Exception("Tensor must require grad to perform this operation")
         if not self.is_scalar():
-            raise "Cannot calculate gradient of a non-scalar"
+            raise Exception("Cannot calculate gradient of a non-scalar")
         return True
 
     def backward(self,gradient=1):
@@ -79,11 +79,16 @@ class Tensor(np.ndarray):
     def __add__(self,other): return self.bin_op(other,np.add,AddGradFn)
     def __sub__(self,other): return self.bin_op(other,np.subtract,SubGradFn)
     def __mul__(self,other): return self.bin_op(other,np.multiply,MulGradFn)
+    def __pow__(self,other): return self.bin_op(other,np.power,PowGradFn)
+    def __truediv__(self,other):
+        return self.bin_op(other,np.divide,DivGradFn)
+
+
     def __rmul__(self,other): return self.__mul__(other)
     def __radd__(self,other): return self.__add__(other)
     def __rsub__(self,other): return self.__sub__(other)
 
-    # todo
+    # TODO
     def __iadd__(self,other): return self.bin_op(other,np.add,AddGradFn)
     def __sub__(self,other): return self.bin_op(other,np.subtract,SubGradFn)
     def __mul__(self,other): return self.bin_op(other,np.multiply,MulGradFn)

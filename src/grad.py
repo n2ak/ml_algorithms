@@ -77,6 +77,32 @@ class MulGradFn(BinaryOpGradFn):
 
         h(v0,k1)
         h(v1,k0)
+class PowGradFn(BinaryOpGradFn):
+    def __init__(self,vars) -> None:
+        super().__init__(vars)
+    
+    def calculate(self, *args, **kwargs):
+        super().calculate(*args,**kwargs)
+        def h(v,k):
+            if v : v.calculate(k)
+        x,v0 = self.next_functions[0]
+        y,v1 = self.next_functions[1]
+        h(v0,y * (x ** (y-1)))
+        h(v1,(x ** y)*x.log())
+class DivGradFn(BinaryOpGradFn):
+    def __init__(self,vars) -> None:
+        super().__init__(vars)
+    
+    def calculate(self, *args, **kwargs):
+        super().calculate(*args,**kwargs)
+        def h(v,k):
+            print("k",k)
+            if v : v.calculate(k)
+        x,v0 = self.next_functions[0]
+        y,v1 = self.next_functions[1]
+        print(x,y)
+        h(v0,1/y)
+        h(v1,-1*(x/(y**2)))
 
 class IdentityGradFn(AddGradFn):
     def __init__(self,vars) -> None:
@@ -101,6 +127,7 @@ class ExpGradFn(OneOperatorOpGradFn):
         k,v = self.next_functions[0]
         print(k,v)
         v.calculate(k.exp())
+
 class MeanGradFn(OneOperatorOpGradFn):
     def __init__(self,vars) -> None:
         super().__init__(vars)

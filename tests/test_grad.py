@@ -11,16 +11,16 @@ def equal_grad(a,b,t=1e-3):
     assert tuple(Tensor.array(a.grad).shape) == tuple(Tensor.array(b.grad).shape)
     np.testing.assert_allclose(a.grad,b.grad)
     # assert (a.grad - b.grad).sum() <= t
-def init(shape1=(),shape2=()):
-    a_,b_ = np.random.rand(*shape1),np.random.rand(*shape2)
+def init(nums=None,shape1=(),shape2=()):
+    a_,b_ = nums or (np.random.rand(*shape1),np.random.rand(*shape2))
     a1 = torch.tensor(a_,requires_grad=True)
     b1 = torch.tensor(b_,requires_grad=True)
 
     a2 = Tensor.array(a_,requires_grad=True)
     b2 = Tensor.array(b_)
     return a1,b1,a2,b2
-def bin_op_test(func):
-    a_1,b_1,a_2,b_2 = init()
+def bin_op_test(func,nums=None):
+    a_1,b_1,a_2,b_2 = init(nums=nums)
     def h(a1,b1,a2,b2):
         res1 = func(a1,b1)
         res2 = func(a2,b2)
@@ -51,12 +51,15 @@ def test_sub():
     bin_op_test(lambda x,y: x-y)
 def test_mul():
     bin_op_test(lambda x,y: x+y)
+def test_div():
+    bin_op_test(lambda x,y: x/y)#,nums=(3.0,2.0))
+def test_pow():
+    bin_op_test(lambda x,y: x**y)
+    
 def test_mul2():
     op_test(lambda x: x*100)
-
 def test_mul3():
     op_test(lambda x: -1*x)
-
 @pytest.mark.skip("what operation is this ?")
 def test_mul3():
     op_test(lambda x: -x)
@@ -65,7 +68,6 @@ def test_add2():
     com_op(lambda x,y: x+y)
 def test_sub2():
     com_op(lambda x,y: x-y)
-
 @pytest.mark.skip("Why ?")
 def test_mul4():
     com_op(lambda x,y: x*y)
