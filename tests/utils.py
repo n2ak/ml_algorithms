@@ -1,4 +1,4 @@
-from src import Tensor
+from src import *
 
 
 def equal(a, b, t=1e-3, print_ok=False):
@@ -18,6 +18,6 @@ def equal(a, b, t=1e-3, print_ok=False):
 
 def comp(x, type1, type2, args1=[], args2=[], print_ok=False):
     import torch
-    a = type1(torch.tensor(x), *args1)
-    b = type2(Tensor.array(x), *args2)
+    a = type1(torch.tensor(x.numpy()), *args1)
+    b = type2(tensor(x), *args2)
     assert equal(a, b, print_ok=print_ok)

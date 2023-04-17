@@ -5,12 +5,12 @@ import torch
 
 
 def test_dense():
-    x = Tensor.array([3, 4, 5])
-    w = Tensor.array(
+    x = tensor([3, 4, 5])
+    w = tensor(
         [[6, 5],
          [2, 8],
          [4, 4]])
-    expected = Tensor.array([46, 67])
+    expected = tensor([46, 67])
     layer = Dense.from_weights(w)
     res = layer(x)
     assert res.shape == (w.shape[-1],)
@@ -23,7 +23,7 @@ def test_dense2():
     a = torch.nn.Linear(in_, out_, bias=False)
     b = Dense.from_weights(a.weight.detach().numpy().T, bias=False)
     a = a(torch.tensor(x))
-    b = b(Tensor.array(x))
+    b = b(tensor(x))
     equal(a.detach().numpy(), b, print_ok=True)
 
 
@@ -61,6 +61,6 @@ def test_sequential2():
     model1 = torch.nn.Sequential(*model1)
     model2 = Sequential(model2)
     res1 = model1(torch.tensor(x))
-    res2 = model2(Tensor.array(x))
+    res2 = model2(tensor(x))
 
     assert equal(res1.detach().numpy(), res2, print_ok=True)

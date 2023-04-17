@@ -3,14 +3,15 @@ from .. import *
 import torch
 import numpy as np
 import pytest
+from src import *
 
 
 def equal_grad(a, b, t=1e-3):
     # assert len(args) % 2 == 0
     # for args in range(0,len(args),2)
     #     assert args
-    assert tuple(Tensor.array(a.grad).shape) == tuple(
-        Tensor.array(b.grad).shape)
+    assert tuple(tensor(a.grad).shape) == tuple(
+        tensor(b.grad).shape)
     np.testing.assert_allclose(a.grad, b.grad)
     # assert (a.grad - b.grad).sum() <= t
 
@@ -20,8 +21,8 @@ def init(nums=None, shape1=(), shape2=()):
     a1 = torch.tensor(a_, requires_grad=True)
     b1 = torch.tensor(b_, requires_grad=True)
 
-    a2 = Tensor.array(a_, requires_grad=True)
-    b2 = Tensor.array(b_)
+    a2 = tensor(a_, requires_grad=True)
+    b2 = tensor(b_)
     return a1, b1, a2, b2
 
 
@@ -44,7 +45,6 @@ def op_test(func):
     res1 = func(a1)
     res2 = func(a2)
     res1.backward()
-    print(a2.requires_grad, res2.requires_grad,)
     res2.backward()
     equal_grad(a1, a2)
 
@@ -113,7 +113,7 @@ def test_mean():
     a.requires_grad = True
     a.mean().backward()
 
-    b = Tensor.array(a.detach().numpy(), requires_grad=True)
+    b = tensor(a.detach().numpy(), requires_grad=True)
     x = b.mean()
     x.backward()
 
@@ -127,10 +127,9 @@ def test_mean2():
     a1 = a1.mean(dim=0)
     a1.backward()
 
-    b = Tensor.array(a.detach().numpy(), requires_grad=True)
+    b = tensor(a.detach().numpy(), requires_grad=True)
     b1 = b.mean(axis=0)
     b1 = b1.mean(axis=0)
-    print(b1)
     b1.backward()
 
     equal_grad(a, b)
@@ -141,7 +140,7 @@ def test_sum():
     a.requires_grad = True
     a.sum().backward()
 
-    b = Tensor.array(a.detach().numpy(), requires_grad=True)
+    b = tensor(a.detach().numpy(), requires_grad=True)
     x = b.sum()
     x.backward()
 
@@ -155,10 +154,9 @@ def test_sum2():
     a1 = a1.sum(dim=0)
     a1.backward()
 
-    b = Tensor.array(a.detach().numpy(), requires_grad=True)
+    b = tensor(a.detach().numpy(), requires_grad=True)
     b1 = b.sum(axis=0)
     b1 = b1.sum(axis=0)
-    print(b1)
     b1.backward()
 
     equal_grad(a, b)
@@ -178,19 +176,18 @@ def test_matmul():
     equal_grad(w, w2)
 
 
-@pytest.mark.skip("")
+@pytest.mark.skip("Needs test_matmul to pass")
 def test_2():
     x = Tensor.rand(100).requires_grad_()
     w = Tensor.rand(100, 10)
     b = Tensor.zeros(10).requires_grad_()
 
     (x @ w + b).sum().backward()
-    print(x.grad, w.grad, b.grad)
 
     assert False
 
 
-@pytest.mark.skip("")
+@pytest.mark.skip("Needs other tests to pass")
 def test_():
     x = Tensor.rand(100).requires_grad_()
     linear = torch.nn.Linear(100, 10)
@@ -198,14 +195,11 @@ def test_():
     w = linear.weight.detach().numpy()
     dense = Dense.from_weights(w.T)
     r = dense(x)
-    print("r", dense.bias.grad)
-    print("r", r.grad)
     r = r.sum().backward()
-
-    print("shape", w.shape)
-    print(dense.weights.grad)
-    print(x.grad)
 
     equal_grad(dense.weights, linear.weight)
     equal_grad(dense.bias, linear.bias)
     # assert False
+
+
+# def test_complex():

@@ -11,5 +11,5 @@ sys.path.insert(0, myPath + '/../src')
 @pytest.mark.skip()
 def test_tensor():
     arr = np.random.rand(1, 2, 4, 5)
-    v1 = Tensor.array(arr) + 3
+    v1 = tensor(arr) + 3
     assert v1.grad_fn == AddGradFn
