@@ -1,15 +1,14 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Tuple
 
 
 class GradFn(ABC):
-
     @abstractmethod
     def __init__(self, vars) -> None:
-        super().__init__()
-        self.next_functions = []
-        from .tensor import Tensor
+        from src.tensor import Tensor
+        self.next_functions: List[Tuple[Tensor, GradFn]] = []
+
         for var in vars:
             value: GradFn | None = None
             if isinstance(var, Tensor):
@@ -20,20 +19,37 @@ class GradFn(ABC):
             self.next_functions.append((var, value))
 
     @abstractmethod
-    def calculate(self, *args, **kwargs):
+    def calculate(self):
         pass
+
+    def print_graph(self, indent=0, remove_acc=False):
+        from src import Tensor
+        if indent == 0:
+            print(type(self).__name__)
+        indent += 1
+        for k, v in self.next_functions:
+            if not isinstance(k, Tensor) or (remove_acc and type(v) is AccumulateGrad):
+                continue
+            print(" "*indent*2+"↳", type(v).__name__,
+                  f"requires_grad={k.requires_grad}")
+            v.print_graph(indent+1, remove_acc)
 
 
 class AccumulateGrad(GradFn):
-    def __init__(self, tensor) -> None:
-        self.tensor = tensor
+    from src. tensor import Tensor
+
+    def __init__(self, x: Tensor) -> None:
+        super().__init__([])
+        self.x = x
 
     def calculate(self, gradient):
-        from .tensor import Tensor
-        grad = self.tensor.grad
+        from src.tensor import tensor
+        gradient = tensor(gradient, requires_grad=False)
+
+        grad = self.x.grad
         if grad is None:
-            grad = Tensor.array(0)
-        self.tensor.set_grad(grad + gradient)
+            grad = tensor(1)
+        self.x.set_grad(grad * gradient)
 
 
 class BinaryOpGradFn(GradFn, ABC):
@@ -42,111 +58,95 @@ class BinaryOpGradFn(GradFn, ABC):
         super().__init__(vars)
 
     @abstractmethod
-    def calculate(self, *args, **kwargs):
-        super().calculate(*args, **kwargs)
-        assert len(self.next_functions) == 2, f"{len(self.next_functions)}"
+    def calculate(self):
+        assert len(
+            self.next_functions) == 2, f"found: {len(self.next_functions)}"
 
 
 class AddGradFn(BinaryOpGradFn):
     def __init__(self, vars) -> None:
         super().__init__(vars)
 
-    def calculate(self, *args, **kwargs):
-        super().calculate(*args, **kwargs)
-
-        def h(v, k):
-            if v:
-                v.calculate(k)
-        h(self.next_functions[0][1], 1)
-        h(self.next_functions[1][1], 1)
+    def calculate(self, gradient):
+        super().calculate()
+        up(self.next_functions[0][1], 1, gradient)
+        up(self.next_functions[1][1], 1, gradient)
 
 
 class SubGradFn(BinaryOpGradFn):
     def __init__(self, vars) -> None:
         super().__init__(vars)
 
-    def calculate(self, *args, **kwargs):
-        super().calculate(*args, **kwargs)
-
-        def h(v, k):
-            if v:
-                v.calculate(k)
-        h(self.next_functions[0][1], 1)
-        h(self.next_functions[1][1], -1)
+    def calculate(self, gradient):
+        super().calculate()
+        up(self.next_functions[0][1], 1, gradient)
+        up(self.next_functions[1][1], -1, gradient)
 
 
 class MulGradFn(BinaryOpGradFn):
     def __init__(self, vars) -> None:
         super().__init__(vars)
 
-    def calculate(self, *args, **kwargs):
-        super().calculate(*args, **kwargs)
-
-        def h(v, k):
-            if v:
-                v.calculate(k)
+    def calculate(self, gradient):
+        super().calculate()
 
         x, v0 = self.next_functions[0]
         y, v1 = self.next_functions[1]
 
-        h(v0, y)
-        h(v1, x)
+        up(v0, y, gradient)
+        up(v1, x, gradient)
 
 
 class PowGradFn(BinaryOpGradFn):
     def __init__(self, vars) -> None:
         super().__init__(vars)
 
-    def calculate(self, *args, **kwargs):
-        super().calculate(*args, **kwargs)
-
-        def h(v, k):
-            if v:
-                v.calculate(k)
+    def calculate(self, gradient):
+        super().calculate()
         x, v0 = self.next_functions[0]
         y, v1 = self.next_functions[1]
-        h(v0, y * (x ** (y-1)))
-        h(v1, (x ** y)*x.log())
+        up(v0, y * (x ** (y-1)), gradient)
+        up(v1, (x ** y)*x.log(), gradient)
+
+
+def up(v, k, gradient):
+    if v:
+        v.calculate(gradient*k)
 
 
 class DivGradFn(BinaryOpGradFn):
     def __init__(self, vars) -> None:
         super().__init__(vars)
 
-    def calculate(self, *args, **kwargs):
-        super().calculate(*args, **kwargs)
+    def calculate(self, gradient):
+        super().calculate()
 
-        def h(v, k):
-            if v:
-                v.calculate(k)
         x, v0 = self.next_functions[0]
         y, v1 = self.next_functions[1]
-        h(v0, 1/y)
-        h(v1, -1*(x/(y**2)))
+        up(v0, 1/y, gradient)
+        up(v1, -1*(x/(y**2)), gradient)
 
 
 class MatMulGradFn(BinaryOpGradFn):
     def __init__(self, vars) -> None:
         super().__init__(vars)
 
-    def calculate(self, *args, **kwargs):
-        super().calculate(*args, **kwargs)
-
-        def h(v, k):
-            if v:
-                v.calculate(k)
+    def calculate(self, gradient):
+        super().calculate()
         # x @ y
         x, v0 = self.next_functions[0]
         y, v1 = self.next_functions[1]
-        h(v0, y.T)
-        h(v1, x.T)
 
-#x = x+0
+        print("yo", x.shape, y.T.shape)
+        gradient = 1
+        up(v0, y.T, gradient)
+        up(v1, x.T, gradient)
+
+# x = x+0
 
 
 class IdentityGradFn(AddGradFn):
     def __init__(self, vars) -> None:
-        print("vars", vars)
         super().__init__(vars)
 
 
@@ -156,8 +156,8 @@ class OneOperatorOpGradFn(GradFn, ABC):
         super().__init__(vars)
 
     @abstractmethod
-    def calculate(self, *args, **kwargs):
-        super().calculate(*args, **kwargs)
+    def calculate(self):
+        super().calculate()
         assert len(self.next_functions) == 1, f"{len(self.next_functions)}"
 
 
@@ -165,30 +165,56 @@ class ExpGradFn(OneOperatorOpGradFn):
     def __init__(self, vars) -> None:
         super().__init__(vars)
 
-    def calculate(self, *args, **kwargs):
-        super().calculate(*args, **kwargs)
+    def calculate(self, gradient):
+        super().calculate()
         k, v = self.next_functions[0]
-        print(k, v)
-        v.calculate(k.exp())
+        up(v, k.exp(), gradient)
+
+
+def acc(grad, new):
+    return grad * new
+
+
+class LogGradFn(OneOperatorOpGradFn):
+    def __init__(self, vars) -> None:
+        super().__init__(vars)
+
+    def calculate(self, gradient):
+        super().calculate()
+        k, v = self.next_functions[0]
+        up(v, 1/k, gradient)
 
 
 class MeanGradFn(OneOperatorOpGradFn):
-    def __init__(self, vars) -> None:
+    def __init__(self, vars, axis) -> None:
         super().__init__(vars)
 
-    def calculate(self, *args, **kwargs):
-        super().calculate(*args, **kwargs)
+        self.axis = axis
+
+    def calculate(self, gradient):
+        from src.tensor import Tensor
+        super().calculate()
         k, v = self.next_functions[0]
-        from .tensor import Tensor
-        v.calculate(Tensor.ns_like(k, 1/k.size))
+        if (self.axis is not None) and (gradient.shape != k.shape):
+            gradient_shape = list(k.shape)
+            gradient_shape[self.axis] = 1
+            gradient = gradient.reshape(*gradient_shape)
+        up(v, Tensor.ns_like(k, 1/k.size), gradient)
 
 
 class SumGradFn(OneOperatorOpGradFn):
-    def __init__(self, vars) -> None:
+    def __init__(self, vars, axis) -> None:
         super().__init__(vars)
 
-    def calculate(self, *args, **kwargs):
-        super().calculate(*args, **kwargs)
+        self.vvv = vars
+        self.axis = axis
+
+    def calculate(self, gradient):
+        from src.tensor import Tensor
+        super().calculate()
         k, v = self.next_functions[0]
-        from .tensor import Tensor
-        v.calculate(Tensor.ones_like(k))
+        if (self.axis is not None) and (gradient.shape != k.shape):
+            gradient_shape = list(k.shape)
+            gradient_shape[self.axis] = 1
+            gradient = gradient.reshape(*gradient_shape)
+        up(v, Tensor.ones(k.shape), gradient)
