@@ -5,8 +5,8 @@ if TYPE_CHECKING:
 
 import numpy as np
 
-indent = 1
-print_ok = True
+indent = 0
+print_ok = False
 
 
 def printed(func):
@@ -18,11 +18,10 @@ def printed(func):
     def p(*args, **kwargs):
         global indent
         print("------------------------------------")
-        print(" "*indent, f"called: '{func.__name__}'")
+        print(" "*indent*5, f"called: '{func.__name__}'")
         indent += 1
         res = func(*args, **kwargs)
         indent += -1
-        print(" "*indent, f"res   : '{res}'")
         return res
     return p
 
@@ -33,53 +32,26 @@ def is_scalar(tensor: Tensor) -> bool:
 
 
 @printed
-def relu(tensor: Tensor) -> Tensor:
-    tensor = tensor.copy()
-    tensor[tensor < 0] = 0
-    return tensor
-
-
-@printed
-def sigmoid(tensor: Tensor) -> Tensor:
-    return 1 / ((-tensor).exp() + 1)
-
-
-@printed
-def softmax(tensor: Tensor, dim: int = 0) -> Tensor:
-    # avoids overflow , https://timvieira.github.io/blog/post/2014/02/11/exp-normalize-trick/
-    b = tensor.max() or 0
-    e = (tensor - b).exp()
-    return e/e.sum(axis=dim, keepdims=True)
-
-
-@printed
-def log_softmax(tensor: Tensor, dim=0) -> Tensor:
-    return tensor.softmax(dim=dim).log()
-
-
-@printed
 def cross_entropy(x: Tensor, t, dim=0, reduction="none", from_logits=False) -> Tensor:
     # if from_logits:
     #     TODO : from_logits is True
     #     t = t.flatten().astype(np.int32)
-    return x.log_softmax(dim).negative_log_likelihood(t, reduction=reduction)
+    x = x.log_softmax(dim)
+    x = x.negative_log_likelihood(t, reduction=reduction)
+    return x
 
 
 @printed
 def negative_log_likelihood(x: Tensor, t, reduction="none") -> Tensor:
-    lns_ = []
-    for i, _ in enumerate(x):
-        # print("a",i,t[i])
-        lns_.append(- x[i][t[i]])
-    from .tensor import Tensor
-    lns = Tensor.array(lns_)
-    if reduction in [None, "none"]:
-        return lns
-    elif reduction == "sum":
-        return lns.sum()
-    elif reduction == "mean":
-        return lns.mean()
-    raise Exception(f"Invalid argument {reduction=}")
+    from src import Tensor
+    if reduction != "none":
+        assert False, f"{reduction=} not supported"
+    assert len(x.shape) == 2 and len(t.shape) == 1, f"{x.shape} , {t.shape}"
+    t = t.numpy().astype(int)
+    y = Tensor.zeros((len(t), x.shape[-1]))
+    y[list(range(len(t))), t] = -1
+    res = (x*y).sum(axis=1)
+    return res
 
 
 @printed
@@ -107,13 +79,14 @@ def linear(a: Tensor, w: Tensor, b: Tensor) -> Tensor:
     """
     assert a.shape[-1] == w.shape[0]
     assert b is None or b.shape[-1] == w.shape[-1]
-    return (a @ w).biased(b)
+    res = (a @ w).biased(b)
+    return res
 
 
 @printed
 def biased(x: Tensor, bias: Tensor | None = None) -> Tensor:
     if bias is not None:
-        assert tuple(x.shape) == tuple(bias.shape)
+        # assert tuple(x.shape) == tuple(bias.shape), f"{x.shape} != {bias.shape}"
         x += bias
     return x
 
