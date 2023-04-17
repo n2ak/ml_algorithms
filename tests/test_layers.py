@@ -1,5 +1,5 @@
 from tests.utils import equal
-from .. import *
+from src import *
 import pytest
 import torch
 

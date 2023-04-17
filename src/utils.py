@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 if TYPE_CHECKING:
     from .tensor import Tensor
 
@@ -32,29 +32,6 @@ def is_scalar(tensor: Tensor) -> bool:
 
 
 @printed
-def cross_entropy(x: Tensor, t, dim=0, reduction="none", from_logits=False) -> Tensor:
-    # if from_logits:
-    #     TODO : from_logits is True
-    #     t = t.flatten().astype(np.int32)
-    x = x.log_softmax(dim)
-    x = x.negative_log_likelihood(t, reduction=reduction)
-    return x
-
-
-@printed
-def negative_log_likelihood(x: Tensor, t, reduction="none") -> Tensor:
-    from src import Tensor
-    if reduction != "none":
-        assert False, f"{reduction=} not supported"
-    assert len(x.shape) == 2 and len(t.shape) == 1, f"{x.shape} , {t.shape}"
-    t = t.numpy().astype(int)
-    y = Tensor.zeros((len(t), x.shape[-1]))
-    y[list(range(len(t))), t] = -1
-    res = (x*y).sum(axis=1)
-    return res
-
-
-@printed
 def conv2d_output_shape(x: Tensor, out_, ks, p=0, s=1, d=0):
     b, _, w, h = tuple(x.shape)
     s1, s2 = s if isinstance(s, tuple) else (s, s)
@@ -70,32 +47,6 @@ def conv2d_output_shape(x: Tensor, out_, ks, p=0, s=1, d=0):
     h = (h+2*p2-d2*(ks2-1)-1)//s2 + 1
     out_shape = b, out_, w, h
     return out_shape
-
-
-@printed
-def linear(a: Tensor, w: Tensor, b: Tensor) -> Tensor:
-    """
-    returns a*w+b
-    """
-    assert a.shape[-1] == w.shape[0]
-    assert b is None or b.shape[-1] == w.shape[-1]
-    res = (a @ w).biased(b)
-    return res
-
-
-@printed
-def biased(x: Tensor, bias: Tensor | None = None) -> Tensor:
-    if bias is not None:
-        # assert tuple(x.shape) == tuple(bias.shape), f"{x.shape} != {bias.shape}"
-        x += bias
-    return x
-
-
-@printed
-def sequential(x: Tensor, layers) -> Tensor:
-    for layer in layers:
-        x = layer(x)
-    return x
 
 
 @printed

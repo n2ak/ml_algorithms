@@ -1,5 +1,5 @@
 from tests.utils import comp, equal
-from .. import *
+from src import *
 import torch
 import numpy as np
 import pytest

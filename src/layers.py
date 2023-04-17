@@ -36,7 +36,6 @@ class Dense(Layer):
         self.weights = self.init_weights(self.in_, self.out_).requires_grad_()
 
     def forward(self, x: Tensor):
-        print(x.requires_grad, self.weights.requires_grad, self.bias.requires_grad)
         res = x.linear(self.weights, self.bias)
         return res
 

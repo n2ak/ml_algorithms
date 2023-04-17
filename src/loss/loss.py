@@ -1,10 +1,10 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from .tensor import Tensor
+    from ..tensor import Tensor
 
 from abc import ABC
-from .core import HasForwardAndIsCallable
+from ..core import HasForwardAndIsCallable
 
 
 class Loss(HasForwardAndIsCallable, ABC):

@@ -12,6 +12,7 @@ class GradFn(ABC):
         for var in vars:
             value: GradFn | None = None
             if isinstance(var, Tensor):
+                # TODO if var.requires_grad and var.is_a_leaf() and var.grad_fn is None:
                 if var.is_a_leaf() and var.grad_fn is None:
                     value = AccumulateGrad(var)
                 else:
@@ -23,7 +24,7 @@ class GradFn(ABC):
         pass
 
     def print_graph(self, indent=0, remove_acc=False):
-        from src import Tensor
+        from src.tensor import Tensor
         if indent == 0:
             print(type(self).__name__)
         indent += 1
@@ -36,15 +37,16 @@ class GradFn(ABC):
 
 
 class AccumulateGrad(GradFn):
-    from src. tensor import Tensor
 
-    def __init__(self, x: Tensor) -> None:
+    def __init__(self, x) -> None:
         super().__init__([])
         self.x = x
 
     def calculate(self, gradient):
-        from src.tensor import tensor
-        gradient = tensor(gradient, requires_grad=False)
+        from src.tensor import tensor, Tensor
+        if not isinstance(gradient, Tensor):
+            # TODO: had to
+            gradient = tensor(gradient, requires_grad=False)
 
         grad = self.x.grad
         if grad is None:
@@ -186,9 +188,8 @@ class LogGradFn(OneOperatorOpGradFn):
 
 
 class MeanGradFn(OneOperatorOpGradFn):
-    def __init__(self, vars, axis) -> None:
+    def __init__(self, vars, axis=None) -> None:
         super().__init__(vars)
-
         self.axis = axis
 
     def calculate(self, gradient):
@@ -203,7 +204,7 @@ class MeanGradFn(OneOperatorOpGradFn):
 
 
 class SumGradFn(OneOperatorOpGradFn):
-    def __init__(self, vars, axis) -> None:
+    def __init__(self, vars, axis=None) -> None:
         super().__init__(vars)
 
         self.vvv = vars
@@ -213,8 +214,16 @@ class SumGradFn(OneOperatorOpGradFn):
         from src.tensor import Tensor
         super().calculate()
         k, v = self.next_functions[0]
-        if (self.axis is not None) and (gradient.shape != k.shape):
+        if (self.axis is not None) and (gradient.shape != () and gradient.shape != k.shape):
             gradient_shape = list(k.shape)
             gradient_shape[self.axis] = 1
             gradient = gradient.reshape(*gradient_shape)
         up(v, Tensor.ones(k.shape), gradient)
+
+
+class RelUBackward(OneOperatorOpGradFn):
+    def __init__(self, vars) -> None:
+        super().__init__(vars)
+
+    def calculate(self, gradient):
+        pass
