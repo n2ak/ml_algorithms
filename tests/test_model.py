@@ -7,7 +7,7 @@ class MyNet(Module):
         self.layer1 = Dense(10, 100)
         self.layer2 = Dense(100, 10)
 
-    def forward(self, x) -> Tensor:
+    def forward(self, x) -> _Tensor:
         x = self.layer1(x)
         x = self.layer2(x)
         return x
@@ -24,7 +24,7 @@ def test():
     sgd = SGD(net.get_parameters())
 
     net.zero_grad()
-    y_pred: Tensor = net(X).argmax(axis=-1)
+    y_pred: _Tensor = net(X).argmax(axis=-1)
     loss = (y_pred-y)
     loss = loss.mean()
     loss.backward()

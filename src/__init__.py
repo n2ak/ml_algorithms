@@ -1,14 +1,9 @@
-from .core import *
-from .function import *
-from .layers import *
-from .tensor import *
-from .utils import *
-from .loss.loss import *
-from .optimizer import *
+from src._base import _HasForwardAndIsCallable, _Trainable
+from src._tensor import tensor, _Tensor
 
 
-class Module(HasForwardAndIsCallable):
-    # TODO
+class Module(_HasForwardAndIsCallable):
+    # TODO: Module
     def __init__(self) -> None:
         self.params = None
 
@@ -17,14 +12,14 @@ class Module(HasForwardAndIsCallable):
         for p in params:
             p.zero_grad()
 
-    def get_parameters(self) -> list[Tensor]:
+    def get_parameters(self) -> list[_Tensor]:
         if self.params:
             return self.params
         import inspect
         p = []
         for k, v in inspect.getmembers(self):
-            if isinstance(v, Trainable):
-                v: Trainable = v
+            if isinstance(v, _Trainable):
+                v: _Trainable = v
                 p.extend(v.get_trainable_params())
         self.params = p
         return self.params

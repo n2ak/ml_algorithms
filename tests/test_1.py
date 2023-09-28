@@ -1,4 +1,4 @@
-from .. import *
+from src import *
 import numpy as np
 import sys
 import os

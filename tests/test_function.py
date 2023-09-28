@@ -21,6 +21,20 @@ def test_softmax():
         comp(x, torch.nn.Softmax(dim=dim), Softmax(dim=dim), print_ok=True)
 
 
+def test_nll():
+    x = np.random.randint(3, size=(32, 10)).astype(np.float32)
+    b = np.random.randint(10, size=(32,)).astype(int)
+    reduction = "mean"
+    comp(
+        x,
+        torch.nn.NLLLoss(reduction=reduction),
+        NegativeLogLikelihoodLoss(reduction=reduction),
+        args1=[torch.from_numpy(b).type(torch.long)],
+        args2=[tensor(b)],
+        print_ok=True
+    )
+
+
 def test_log_softmax():
     x = np.random.randint(3, size=(1, 10, 4, 2)).astype(np.float32)
     for dim in range(len(x.shape)):

@@ -1,22 +1,30 @@
 An attempt to clone [***Pytorch***](https://github.com/pytorch/pytorch)
 
 ## TO DO
-- ⏳ Add matmul backward.
-- ⏳ Add grad check.
-- ⏳ Add Trainer api.
-- ⏳ Add datasets (mnist..).
-- ⏳ Add convolution.
-- ⏳ Add lstm.
-- ⏳ More optimizers.
+- Ops:
+    - conv2d
+- Layers:
+    - lstm.
+- Optimizer:
+    - SGD with momentum
     - Adam
-- ⏳ Add graviz for backward viz.
-- ⏳ Add backward propagation.
+- Backward propagation:
+    - Add matmul backward.
     - Relu
     - Softmax
     - LogSoftmax
     - CrossEntropy
     - Maximum
-    
+    - NLLLoss   
+    - max/min
+    - select (tensor[indices])
+
+- Other:
+    - Add grad check.
+    - Add Trainer api.
+    - Add datasets (mnist..).
+    - Add graviz for backward viz.
+
 
 
 ## To test

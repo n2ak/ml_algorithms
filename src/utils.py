@@ -1,54 +1,78 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Callable
 if TYPE_CHECKING:
-    from .tensor import Tensor
+    from src._tensor import _Tensor
 
 import numpy as np
 
 indent = 0
 print_ok = False
+max_depth = 5
+printable = [
+    # "loss",
+    # "act",
+    "back"
+    # "unary_ops",
+    # "binary_ops",
+    # "other_ops",
+]
 
 
-def printed(func):
-    if print_ok is False:
-        return lambda *args, **kwargs: func(*args, **kwargs)
-    import functools
+def is_printable(type):
+    global indent, max_depth
+    return (indent < max_depth) and (print_ok) and ((type in printable) or (type is None))
 
-    @functools.wraps(func)
-    def p(*args, **kwargs):
-        global indent
-        print("------------------------------------")
-        print(" "*indent*5, f"called: '{func.__name__}'")
-        indent += 1
-        res = func(*args, **kwargs)
-        indent += -1
-        return res
-    return p
+
+def _printed(type=None, arg_print=None):
+    def helper(func: Callable):
+        import functools
+
+        @functools.wraps(func)
+        def p(*args, **kwargs):
+            if not is_printable(type):
+                return func(*args, **kwargs)
+            global indent
+            if indent == 0:
+                print("------------------------------------")
+            print(" "*(indent*5), f"{func.__qualname__}", func)
+            if arg_print is not None:
+                print(" "*(indent*5), f"called with")
+                for arg in args:
+                    arg_print(indent, arg)
+            # for k,arg in kwargs.items():
+            #     arg_print(indent,arg)
+
+            indent += 1
+            res = func(*args, **kwargs)
+            indent += -1
+            return res
+        return p
+    return helper
+
+
+printed = _printed()
+
+
+def as_layer(name, module_name, base):
+    import sys
+
+    def decorator_factory(method):
+        def set_args(self, args):
+            self.args = args
+
+        def call(self, args, kwargs):
+            kwargs.update(self.args)
+            return method(*args, **kwargs, **self.args)
+        new_type = type(name, base, {
+            "__init__": lambda self, **args: set_args(self, args),
+            "forward": lambda self, *args, **kwargs: call(self, args, kwargs)
+        })
+        setattr(sys.modules[module_name], name, new_type)
+
+        return method
+    return decorator_factory
 
 
 @printed
-def is_scalar(tensor: Tensor) -> bool:
+def is_scalar(tensor: _Tensor) -> bool:
     return np.isscalar(tensor)
-
-
-@printed
-def conv2d_output_shape(x: Tensor, out_, ks, p=0, s=1, d=0):
-    b, _, w, h = tuple(x.shape)
-    s1, s2 = s if isinstance(s, tuple) else (s, s)
-    p1, p2 = p if isinstance(p, tuple) else (p, p)
-    d1, d2 = d if isinstance(d, tuple) else (d, d)
-    ks1, ks2 = ks
-    from math import ceil
-    # w,h = (w-ks1+p1+s1)/s1,(h-ks2+p2+s2)/s2
-    # w = ceil(w) if w - int(w) < .5 else ceil(w)+1
-    # h = ceil(h) if h - int(h) < .5 else ceil(h)+1
-
-    w = (w+2*p1-d1*(ks1-1)-1)//s1 + 1
-    h = (h+2*p2-d2*(ks2-1)-1)//s2 + 1
-    out_shape = b, out_, w, h
-    return out_shape
-
-
-@printed
-def conv2d(x: Tensor, w: Tensor, b: Tensor, padding=0, stride=1, dilation=0):
-    pass

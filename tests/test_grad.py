@@ -9,8 +9,8 @@ def equal_grad(a, b, t=1e-3):
     # assert len(args) % 2 == 0
     # for args in range(0,len(args),2)
     #     assert args
-    assert tuple(tensor(a.grad).shape) == tuple(
-        tensor(b.grad).shape)
+    # print(type(a), type(b))
+    assert tuple((a.grad).shape) == tuple((b.grad).shape)
     np.testing.assert_allclose(a.grad, b.grad)
     # assert (a.grad - b.grad).sum() <= t
 
@@ -82,7 +82,7 @@ def test_mul2():
 
 
 def test_mul3():
-    op_test(lambda x: -x)
+    op_test(lambda x: -1 * x)
 
 
 def test_add2():
@@ -161,11 +161,78 @@ def test_sum2():
     equal_grad(a, b)
 
 
-@pytest.mark.skip("Broken")
+def test_sum3():
+    a = torch.rand(3, 2)
+    a.requires_grad = True
+    a1 = a.sum(dim=-1)
+    a1 = a1.sum()
+    a1.backward()
+
+    b = tensor(a.detach().numpy(), requires_grad=True)
+    b1 = b.sum(axis=-1)
+    b1 = b1.sum()
+    b1.backward()
+
+    equal_grad(a, b)
+
+
+def test_sum4():
+    a = torch.rand(3, 2)
+    a.requires_grad = True
+    a1 = a.sum(dim=-1, keepdim=True)
+    a1 = a1.mean()
+    a1.backward()
+
+    b = tensor(a.detach().numpy(), requires_grad=True)
+    b1 = b.sum(axis=-1, keepdims=True)
+    b1 = b1.mean()
+    b1.backward()
+
+    equal_grad(a, b)
+
+
+def test_softmax():
+    torch.manual_seed(1)
+    a = torch.rand(3, 2)
+    a.requires_grad = True
+    torch.softmax(a, dim=-1).sum().backward()
+
+    b = tensor(a.detach().numpy(), requires_grad=True)
+    f = b.softmax(dim=-1).sum()
+    f.backward()
+    from src.grad.viz import plot_graph
+    print(b)
+    plot_graph(f)
+    equal_grad(a, b)
+
+
+def test_cross_entropy():
+    torch.manual_seed(1)
+    a = torch.rand(3, 2)
+    c = torch.randint(0, 2, size=(3,))
+    a.requires_grad = True
+    res1 = torch.nn.functional.cross_entropy(a, c)
+    res1.backward()
+
+    b = tensor(a.detach().numpy(), requires_grad=True)
+    d = tensor(c.detach().numpy())
+    b.cross_entropy(d)
+    res2 = b.cross_entropy(d)
+    res2.backward()
+
+    # print("1",torch.nn.functional.cross_entropy(a, c),torch.nn.functional.nll_loss(a.log_softmax(-1),c))
+    # print("2", b.cross_entropy(d), b.log_softmax(-1).nll(d))
+    equal_grad(a, b)
+
+
+# @pytest.mark.skip("Broken")
 def test_matmul():
-    x = Tensor.rand(100).requires_grad_()
-    w = Tensor.rand(100, 10).requires_grad_()
-    r = (x @ w).sum().backward()
+    x = Tensor.rand(4, 3).requires_grad_()
+    w = Tensor.rand(3, 2).requires_grad_()
+    print(x.shape, w.shape, (x @ w))
+    r = (x @ w)
+    r = r.sum()
+    r = r.backward()
 
     x2 = x.torch()
     w2 = w.torch()

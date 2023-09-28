@@ -21,6 +21,6 @@ def test_1():
     ks = randint(1, 10), randint(1, 10)
 
     x = torch.rand(b, in_, w, h)
-    res1 = conv2d_output_shape(x, out_, ks, p, s)
+    res1 = _conv2d_output_shape(x, out_, ks, p, s)
     res2 = torch.nn.Conv2d(in_, out_, ks, padding=p, stride=s)(x).shape
     assert res1 == res2

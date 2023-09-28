@@ -1,4 +1,3 @@
-from abc import ABC, abstractmethod
 import numpy as np
 original_random_state = None
 np.random.seed(1)
@@ -19,15 +18,6 @@ seed(1)
 
 def jacobian(function):
     pass
-
-
-class HasForwardAndIsCallable(ABC):
-    @abstractmethod
-    def forward(self, *args, **kwargs):
-        raise Exception("Unimplemented")
-
-    def __call__(self, *args, **kwargs):
-        return self.forward(*args, **kwargs)
 
 
 def _backward(gradient, tensor):
