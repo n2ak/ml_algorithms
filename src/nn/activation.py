@@ -31,9 +31,7 @@ def sigmoid(tensor: _Tensor) -> _Tensor:
 @printed_act
 @as_activation_layer(name="Softmax")
 def softmax(x: _Tensor, dim: int = -1) -> _Tensor:
-    return x.exp()/x.exp().sum(axis=dim, keepdim=True)
     # avoids overflow , https://timvieira.github.io/blog/post/2014/02/11/exp-normalize-trick/
-    x.name = "x"
     x = (x - x.numpy().max()).exp()
     x = x/(x.sum(axis=dim, keepdim=True))
     return x
@@ -43,10 +41,6 @@ def softmax(x: _Tensor, dim: int = -1) -> _Tensor:
 @as_activation_layer(name="LogSoftmax")
 def log_softmax(x: _Tensor, dim=-1) -> _Tensor:
     # https://stackoverflow.com/questions/61567597/how-is-log-softmax-implemented-to-compute-its-value-and-gradient-with-better
-    return x.softmax(dim=dim).log()
-    from src._tensor import tensor
-    x.name = "x"
     new_x = x-x.data.max(axis=dim, keepdims=True)
-    new_x.name = "new_x"
-    res = new_x - new_x.exp().sum(axis=dim, keepdims=True).log()
+    res = new_x - new_x.exp().sum(axis=dim, keepdim=True).log()
     return res

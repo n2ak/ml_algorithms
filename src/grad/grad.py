@@ -108,19 +108,29 @@ class BinaryOpGradFn(GradFn, ABC):
     # def get_op(self): raise Exception("Not implemented")
 
 
-def un_broadcast(v, gradient):
-    if len(v.shape) == 0:
-        return gradient.sum()
-    summ = []
-    for i in range(0, len(gradient.shape)):
-        dim1 = v.shape[len(v.shape) - i - 1]
-        dim2 = gradient.shape[len(gradient.shape) - i-1]
-        if len(v.shape) - i - 1 < 0 or dim1 != dim2:
-            # NOTE: when dim1 = 1
-            summ.append(len(gradient.shape) - i-1)
-    grad = gradient
-    if len(summ):
-        grad = gradient.sum(axis=tuple(summ))
+def correct_shape(v, gradient):
+    summing = v.size < gradient.size
+    if summing:
+        if len(v.shape) == 0:
+            return gradient.sum()
+        summ = []
+        for i in range(0, len(gradient.shape)):
+            dim1 = v.shape[len(v.shape) - i - 1]
+            dim2 = gradient.shape[len(gradient.shape) - i-1]
+            if len(v.shape) - i - 1 < 0 or dim1 != dim2:
+                # NOTE: when dim1 = 1
+                index = len(gradient.shape) - i-1
+                summ.append(index)
+        grad = gradient
+        if len(summ):
+            grad = gradient.sum(axis=tuple(summ))
+            grad = grad.reshape(v.shape)
+    else:
+        import numpy as np
+        o = np.broadcast(v.data, gradient)
+        gradient.data = np.broadcast_to(gradient.data, o.shape)
+        grad = gradient
+    assert grad.shape == v.shape, f"did {summing=},{grad.shape} != {v.shape}"
     return grad
 
 
@@ -132,10 +142,10 @@ class AddGradFn(BinaryOpGradFn):
         super()._calculate(gradient)
         for v, grad_fn in self.next_functions:
             from src._tensor import _Tensor
+            new_grad = gradient
             if isinstance(gradient, _Tensor) and isinstance(v, _Tensor) and v.shape != gradient.shape:
-                un_broadcast(v, gradient)
-            else:
-                up([v, grad_fn], 1, gradient, print_indent=print_indent)
+                new_grad = correct_shape(v, gradient)
+            up([v, grad_fn], 1, new_grad, print_indent=print_indent)
 
 
 class SubGradFn(BinaryOpGradFn):
@@ -144,8 +154,12 @@ class SubGradFn(BinaryOpGradFn):
     @printed_grad
     def _calculate(self, gradient, print_indent=-1):
         super()._calculate(gradient)
-        up(self.next_functions[0], 1, gradient, print_indent=print_indent)
-        up(self.next_functions[1], -1, gradient, print_indent=print_indent)
+        for (v, grad_fn), M in zip(self.next_functions, [1, -1]):
+            from src._tensor import _Tensor
+            new_grad = gradient
+            if isinstance(gradient, _Tensor) and isinstance(v, _Tensor) and v.shape != gradient.shape:
+                new_grad = correct_shape(v, gradient)
+            up([v, grad_fn], M, new_grad, print_indent=print_indent)
 
 
 class MulGradFn(BinaryOpGradFn):
@@ -204,7 +218,7 @@ class DivGradFn(BinaryOpGradFn):
         gradient2 = -1*(x/(y**2))*gradient
         from src._tensor import _Tensor
         if isinstance(gradient2, _Tensor) and isinstance(y, _Tensor) and y.shape != gradient2.shape:
-            gradient2 = un_broadcast(y, gradient2)
+            gradient2 = correct_shape(y, gradient2)
 
         up(self.next_functions[0], 1/y, gradient, print_indent=print_indent)
         up(self.next_functions[1], 1, gradient2, print_indent=print_indent)
