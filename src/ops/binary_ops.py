@@ -7,7 +7,16 @@ from src.grad.utils import register_grad_fn
 from src.utils import _printed
 printed_binary_ops = _printed("binary_ops")
 
-
+__all__ = [
+    "add",
+    "sub",
+    "mul",
+    "pow",
+    "truediv",
+    "rtruediv",
+    "matmul",
+    "neg",
+]
 if TYPE_CHECKING:
     from src._tensor import _Tensor
 
@@ -66,7 +75,5 @@ def matmul(x: _Tensor, other) -> _Tensor:
 
 
 @printed_binary_ops
-@register_grad_fn(MulGradFn)
 def neg(x: _Tensor) -> _Tensor:
-    # TODO np.negative is wrong
-    return _bin_op(np.multiply, x, -1)
+    return mul(x, -1)

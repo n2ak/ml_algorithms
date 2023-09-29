@@ -3,10 +3,11 @@ import graphviz
 from typing import TYPE_CHECKING, Callable
 if TYPE_CHECKING:
     from src._tensor import _Tensor
-from src.grad import BinaryOpGradFn, OneOperatorOpGradFn, GradFn
+from src.grad import BinaryOpGradFn, UnaryOpGradFn, GradFn
 
 import os
 os.environ["PATH"] += os.pathsep + 'C:/Program Files/Graphviz/bin/'
+
 
 def draw_graph(var: _Tensor, filename):
 
@@ -61,7 +62,7 @@ def draw_graph(var: _Tensor, filename):
         from src._tensor import _Tensor
         if isinstance(var, _Tensor):
             if var.grad_fn is not None:
-                if isinstance(var.grad_fn, OneOperatorOpGradFn):
+                if isinstance(var.grad_fn, UnaryOpGradFn):
                     one_op(var)
                 if isinstance(var.grad_fn, BinaryOpGradFn):
                     binary_op(var)

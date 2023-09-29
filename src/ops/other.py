@@ -17,7 +17,7 @@ def linear(a: _Tensor, w: _Tensor, b: _Tensor) -> _Tensor:
     """
     returns a*w+b
     """
-    assert a.shape[-1] == w.shape[0]
+    assert a.shape[-1] == w.shape[0], f"{a.shape}@{b.shape}"
     assert b is None or b.shape[-1] == w.shape[-1]
     res = (a @ w).biased(b)
     return res
@@ -46,14 +46,9 @@ def mean(x: _Tensor, axis=None) -> _Tensor:
 
 @printed_other_ops
 @register_grad_fn(SumGradFn)
-def sum(x: _Tensor, axis=None, keepdims=False) -> _Tensor:
-    return _unary_op(np.sum, x, axis=axis, keepdims=keepdims)
+def sum(x: _Tensor, axis=None, keepdim=False) -> _Tensor:
+    return _unary_op(np.sum, x, axis=axis, keepdims=keepdim)
 
-
-# @printed_other_ops
-# @register_grad_fn(MaximumGradFn)
-# def sum(x: _Tensor) -> _Tensor:
-#     return _unary_op(np.maximum, x)
 
 @printed_other_ops
 def _conv2d_output_shape(x: _Tensor, out_, ks, p=0, s=1, d=0):
@@ -76,11 +71,8 @@ def _conv2d_output_shape(x: _Tensor, out_, ks, p=0, s=1, d=0):
 @printed_other_ops
 def conv2d(
     x: _Tensor,
-    w: _Tensor,
-    b: _Tensor,
-    padding=0,
-    stride=1,
-    dilation=0
+    weights: _Tensor,
+    bias: _Tensor = None,
 ):
 
-    pass
+    return x

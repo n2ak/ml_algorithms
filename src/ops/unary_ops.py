@@ -29,3 +29,16 @@ def log(x: _Tensor) -> _Tensor:
 # @register_grad_fn(PowGradFn)
 # def pow(x: _Tensor) -> _Tensor:
 #     return _unary_op(np.power, x)
+
+
+@printed_unary_ops
+@register_grad_fn(FlattenGradFn)
+def flatten(x: _Tensor, start_dim=0, end_dim=-1):
+    x = x.copy()
+    shape = x.shape
+    if end_dim < 0:
+        end_dim = len(shape)+end_dim
+    end_dim = end_dim+1
+    new_shape = * \
+        shape[:start_dim], np.prod(shape[start_dim:end_dim]), *shape[end_dim:]
+    return x.reshape(new_shape)

@@ -36,7 +36,6 @@ def train(X, Y, params1, params2, iterations=100):
         pred, ourLoss = train_tick(ourModel, ourOptim, ourLossFn, X, Y)
         pred2, torchLoss = train_tick(
             torchModel, torchOptim, torchLossFn, X.torch().float(), Y.torch().long())
-        # print(ourLoss,torchLoss.item())
         ourAcc = acc(pred, Y)
         torchAcc = acc(pred2, Y.torch().long())
         bar.set_description(

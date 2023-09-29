@@ -44,4 +44,6 @@ def negative_log_likelihood(x: _Tensor, t, reduction="mean") -> _Tensor:
 @as_loss_layer("MSELoss")
 # @register_grad_fn(MSEGradFn)
 def mse(x: _Tensor, t) -> _Tensor:
-    return x
+    batch_size = x.shape[0]
+    res = ((x - t)**2).sum() / batch_size
+    return res

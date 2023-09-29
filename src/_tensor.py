@@ -16,9 +16,10 @@ class _Tensor:
         super().__init__()
         self._init(requires_grad)
         self.data = data
+        self.name = ""
 
-    def requires_grad_(self):
-        self.requires_grad = True
+    def requires_grad_(self, requires_grad=True):
+        self.requires_grad = requires_grad
         return self
 
     def set_grad_fn(self, grad_fn):
@@ -31,6 +32,8 @@ class _Tensor:
     def shape(self) -> _Tensor: return self.data.shape
     @property
     def size(self) -> _Tensor: return self.data.size
+    @property
+    def dtype(self) -> _Tensor: return self.data.dtype
 
     @property
     def T(self) -> _Tensor:
@@ -45,17 +48,27 @@ class _Tensor:
         return copy
 
     def reshape(self, *shape):
+        # No copy
         self.data = self.data.reshape(*shape)
         return self
 
+    def _accumulate_grad(self, gradient):
+        grad = self.grad
+        if grad is None:
+            grad = tensor(0)
+        grad = grad + gradient
+        self.set_grad(grad)
+
     def set_grad(self, grad):
+        assert isinstance(grad, _Tensor)
+        self_shape, grad_shape = tuple(self.shape), tuple(grad.shape)
+        assert self_shape == grad_shape, f"Expected gradient of shape: {self_shape},recieved: {grad_shape}"
         self._grad = grad
-        assert tuple(self.shape) == tuple(
-            self._grad.shape), f"{tuple(self.shape)},{tuple(self._grad.shape)}"
 
     def zero_grad(self):
         # self._grad *=0
-        self._grad = np.zeros_like(self._grad)
+        if self._grad is not None:
+            self.set_grad(tensor_zeros_like(self._grad))
 
     def _init(self, requires_grad):
         self._is_leaf = True
@@ -81,9 +94,9 @@ class _Tensor:
     @staticmethod
     def ns_like(x, n): return _Tensor.ns(x.shape, n)
     @staticmethod
-    def zeros_like(x): return _Tensor.ns_like(x.shape, 0)
+    def zeros_like(x): return _Tensor.ns_like(x, 0)
     @staticmethod
-    def ones_like(x): return _Tensor.ns_like(x.shape, 1)
+    def ones_like(x): return _Tensor.ns_like(x, 1)
     @staticmethod
     def ns(shape, k): return tensor(np.zeros(shape)+k)
     @staticmethod
@@ -115,12 +128,12 @@ class _Tensor:
             raise Exception("Cannot calculate gradient of a non-scalar")
         return True
 
-    def backward(self, gradient=1):
+    def backward(self, gradient=1, print_ok=False):
         if not isinstance(gradient, _Tensor):
             gradient = tensor(gradient)
         assert self.can_calculatebackward(gradient)
         assert np.isfinite(self.data), f"Value is infinite: {self.data}"
-        self.grad_fn.calculate(gradient)
+        self.grad_fn.calculate(gradient, print_ok=print_ok)
 
     def is_scalar(self):
         # return np.isscalar(self)
@@ -160,6 +173,10 @@ class _Tensor:
     linear = ops.linear
     conv2d = ops.conv2d
     sequential = ops.sequential
+    flatten = ops.flatten
+
+    def __len__(self):
+        return self.data.__len__()
     # ------------$--------------
     unique = lambda self, *args, **kwargs: np.unique(self, *args, **kwargs)
 

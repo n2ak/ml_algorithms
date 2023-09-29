@@ -46,6 +46,12 @@ class Layer(_Trainable, _HasForwardAndIsCallable, ABC):
         weights.requires_grad = True
         return weights
 
+    def get_trainable_params(self) -> List[_Tensor]:
+        params = [self.weights]
+        if self.bias is not None:
+            params.append(self.bias)
+        return params
+
 
 class Function(_HasForwardAndIsCallable, ABC):
     pass

@@ -19,7 +19,7 @@ printed_grad = _printed(type="back", arg_print=arg_printer)
 
 
 class GradFn(ABC):
-    def __init__(self, vars, result=None) -> None:
+    def __init__(self, vars, result: _Tensor = None) -> None:
         self.result = result
         from src._tensor import _Tensor
         self.next_functions: List[Tuple[_Tensor, GradFn]] = []
@@ -32,31 +32,50 @@ class GradFn(ABC):
                     value = AccumulateGrad(var, result=var)
                 else:
                     value = var.grad_fn
+                # var.came_from = self.result.grad_fn
             self.next_functions.append((var, value))
 
-    def calculate(self, gradient):
+    def calculate(self, gradient, print_ok=False):
         with grad_off():
-            return self._calculate(gradient)
+            print_indent = -1
+            if print_ok:
+                _print_gradient(gradient, 0, fromm=self)
+                print_indent = 1
+            return self._calculate(gradient, print_indent=print_indent)
 
     @abstractmethod
-    def _calculate(self):
-        pass
+    def _calculate(self, gradient):
+        # print(self.__class__.__name__, "recieved gradient",
+        #       gradient.shape, "result", self.result.shape)
+        from src._tensor import _Tensor
+        assert isinstance(gradient, _Tensor)
+        self.result._accumulate_grad(gradient)
 
     def print_graph(self, indent=0, remove_acc=False, print_val=False):
         from src._tensor import _Tensor
         if indent == 0:
-            print(type(self).__name__)
+            print(type(self).__name__, self.result.grad)
         indent += 1
         for k, v in self.next_functions:
-            if not isinstance(k, _Tensor) or (remove_acc and type(v) is AccumulateGrad):
+            if (remove_acc and type(v) is AccumulateGrad):
                 continue
+            if not isinstance(k, _Tensor):
+                print(
+                    " "*indent*2+"↳", "Constant",
+                    k,
+                )
+                return
             val = ""
             if print_val:
                 import numpy as np
                 val = f"val={np.array(k)},"
-            print(" "*indent*2+"↳", type(v).__name__,
-                  val,
-                  f"requires_grad={k.requires_grad}")
+            print(
+                " "*indent*2+"↳", type(v).__name__,
+                val,
+                f"requires_grad={k.requires_grad},",
+                f"name: {k.name}",
+                # f'grad: {k.grad}',
+            )
             v.print_graph(indent+1, remove_acc, print_val)
 
 
@@ -67,23 +86,21 @@ class AccumulateGrad(GradFn):
         self.x = x
 
     @printed_grad
-    def _calculate(self, gradient):
+    def _calculate(self, gradient, print_indent=-1):
         from src._tensor import tensor, _Tensor
         if not isinstance(gradient, _Tensor):
             # TODO: had to
             gradient = tensor(gradient, requires_grad=False)
 
-        grad = self.x.grad
-        if grad is None:
-            grad = tensor(0)
-        gradient.requires_grad = False
-        gradient.grad_fn = None
-        self.x.set_grad(grad + gradient)
+        self.x._accumulate_grad(gradient)
+        if print_indent >= 0:
+            _print_gradient(self.x.grad, print_indent, self)
 
 
 class BinaryOpGradFn(GradFn, ABC):
     @abstractmethod
-    def _calculate(self):
+    def _calculate(self, gradient):
+        super()._calculate(gradient)
         assert len(
             self.next_functions) == 2, f"found: {len(self.next_functions)}"
 
@@ -91,93 +108,121 @@ class BinaryOpGradFn(GradFn, ABC):
     # def get_op(self): raise Exception("Not implemented")
 
 
+def un_broadcast(v, gradient):
+    if len(v.shape) == 0:
+        return gradient.sum()
+    summ = []
+    for i in range(0, len(gradient.shape)):
+        dim1 = v.shape[len(v.shape) - i - 1]
+        dim2 = gradient.shape[len(gradient.shape) - i-1]
+        if len(v.shape) - i - 1 < 0 or dim1 != dim2:
+            # NOTE: when dim1 = 1
+            summ.append(len(gradient.shape) - i-1)
+    grad = gradient
+    if len(summ):
+        grad = gradient.sum(axis=tuple(summ))
+    return grad
+
+
 class AddGradFn(BinaryOpGradFn):
     def get_op(self): return "+"
 
     @printed_grad
-    def _calculate(self, gradient):
-        super()._calculate()
+    def _calculate(self, gradient, print_indent=-1):
+        super()._calculate(gradient)
         for v, grad_fn in self.next_functions:
             from src._tensor import _Tensor
-            if isinstance(gradient, _Tensor) and v.shape != gradient.shape:
-                summ = []
-                for i in range(0, len(gradient.shape)):
-                    dim1 = v.shape[len(v.shape) - i - 1]
-                    dim2 = gradient.shape[len(gradient.shape) - i-1]
-                    if len(v.shape) - i - 1 < 0 or dim1 != dim2:
-                        # NOTE: when dim1 = 1
-                        summ.append(len(gradient.shape) - i-1)
-                grad = gradient
-                if len(summ):
-                    grad = gradient.sum(axis=tuple(summ))
-                up(grad_fn, 1, grad)
+            if isinstance(gradient, _Tensor) and isinstance(v, _Tensor) and v.shape != gradient.shape:
+                un_broadcast(v, gradient)
             else:
-                up(grad_fn, 1, gradient)
+                up([v, grad_fn], 1, gradient, print_indent=print_indent)
 
 
 class SubGradFn(BinaryOpGradFn):
     def get_op(self): return "-"
 
     @printed_grad
-    def _calculate(self, gradient):
-        super()._calculate()
-        up(self.next_functions[0][1], 1, gradient)
-        up(self.next_functions[1][1], -1, gradient)
+    def _calculate(self, gradient, print_indent=-1):
+        super()._calculate(gradient)
+        up(self.next_functions[0], 1, gradient, print_indent=print_indent)
+        up(self.next_functions[1], -1, gradient, print_indent=print_indent)
 
 
 class MulGradFn(BinaryOpGradFn):
     def get_op(self): return "*"
 
     @printed_grad
-    def _calculate(self, gradient):
-        super()._calculate()
+    def _calculate(self, gradient, print_indent=-1):
+        super()._calculate(gradient)
 
         (x, v0), (y, v1) = self.next_functions
 
-        up(v0, y, gradient)
-        up(v1, x, gradient)
+        up(self.next_functions[0], y, gradient, print_indent=print_indent)
+        up(self.next_functions[1], x, gradient, print_indent=print_indent)
 
 
 class PowGradFn(BinaryOpGradFn):
     def get_op(self): return "**"
 
     @printed_grad
-    def _calculate(self, gradient):
-        super()._calculate()
+    def _calculate(self, gradient, print_indent=-1):
+        super()._calculate(gradient)
         (x, v0), (y, v1) = self.next_functions
-        up(v0, y * (x ** (y-1)), gradient)
-        up(v1, (x ** y)*x.log(), gradient)
+        up(self.next_functions[0], y * (x ** (y-1)),
+           gradient, print_indent=print_indent)
+        up(self.next_functions[1], (x ** y)*x.log(),
+           gradient, print_indent=print_indent)
 
 
-def up(v, k, gradient, matmul=False):
-    if v:
-        res = k*gradient if not matmul else k@gradient
-        v._calculate(res)
+def _print_gradient(gradient, indent, fromm):
+    gradient = '\t'*(indent+1) + \
+        str(gradient).replace('\n', '\n'+'\t'*(indent+1))
+    print(" "*indent*5, fromm.__class__.__name__, "grad\n", gradient)
+
+
+def up(next: GradFn, mul, gradient, matmul=False, print_indent=-1):
+    var, grad_fn = next
+    if grad_fn:
+        res = mul*gradient if not matmul else mul@gradient
+        if print_indent >= 0:
+            _print_gradient(res, print_indent, grad_fn)
+            print_indent += 1
+        # var._accumulate_grad(res)
+        grad_fn._calculate(res, print_indent=print_indent)
 
 
 class DivGradFn(BinaryOpGradFn):
     def get_op(self): return "/"
 
     @printed_grad
-    def _calculate(self, gradient):
-        super()._calculate()
+    def _calculate(self, gradient, print_indent=-1):
+        super()._calculate(gradient)
 
         (x, v0), (y, v1) = self.next_functions
-        up(v0, 1/y, gradient)
-        up(v1, -1*(x/(y**2)), gradient)
+        # TODO broadcasting
+
+        gradient2 = -1*(x/(y**2))*gradient
+        from src._tensor import _Tensor
+        if isinstance(gradient2, _Tensor) and isinstance(y, _Tensor) and y.shape != gradient2.shape:
+            gradient2 = un_broadcast(y, gradient2)
+
+        up(self.next_functions[0], 1/y, gradient, print_indent=print_indent)
+        up(self.next_functions[1], 1, gradient2, print_indent=print_indent)
 
 
 class MatMulGradFn(BinaryOpGradFn):
     def get_op(self): return "@"
 
     @printed_grad
-    def _calculate(self, gradient):
+    def _calculate(self, gradient, print_indent=-1):
         # TODO: Broken
-        super()._calculate()
+        super()._calculate(gradient)
         # x @ y
         (x, v0), (y, v1) = self.next_functions
-        up(v0, gradient, y.T, True)
-        up(v1, x.T, gradient, True)
+        up(self.next_functions[0], gradient,
+           y.T, True, print_indent=print_indent)
+        up(self.next_functions[1], x.T, gradient,
+           True, print_indent=print_indent)
 
 # x = x+0
 
@@ -186,79 +231,84 @@ class IdentityGradFn(AddGradFn):
     pass
 
 
-class OneOperatorOpGradFn(GradFn, ABC):
+class UnaryOpGradFn(GradFn, ABC):
     @abstractmethod
-    def _calculate(self):
-        super()._calculate()
+    def _calculate(self, gradient):
+        super()._calculate(gradient)
         assert len(self.next_functions) == 1, f"{len(self.next_functions)}"
 
 
-class ExpGradFn(OneOperatorOpGradFn):
+class ExpGradFn(UnaryOpGradFn):
     @printed_grad
-    def _calculate(self, gradient):
-        super()._calculate()
+    def _calculate(self, gradient, print_indent=-1):
+        super()._calculate(gradient)
         k, v = self.next_functions[0]
-        up(v, k.exp(), gradient)
+        up(self.next_functions[0], k.exp(),
+           gradient, print_indent=print_indent)
 
 
 def acc(grad, new):
     return grad * new
 
 
-class LogGradFn(OneOperatorOpGradFn):
+class LogGradFn(UnaryOpGradFn):
     @printed_grad
-    def _calculate(self, gradient):
-        super()._calculate()
+    def _calculate(self, gradient, print_indent=-1):
+        super()._calculate(gradient)
         k, v = self.next_functions[0]
-        up(v, 1/k, gradient)
+        up(self.next_functions[0], 1/k, gradient, print_indent=print_indent)
 
 
-class MeanGradFn(OneOperatorOpGradFn):
+class MeanGradFn(UnaryOpGradFn):
     def __init__(self, vars, axis=None, **kwargs) -> None:
         super().__init__(vars, **kwargs)
         self.axis = axis
 
     @printed_grad
-    def _calculate(self, gradient):
-        from src._tensor import _Tensor
-        super()._calculate()
+    def _calculate(self, gradient, print_indent=-1):
+        super()._calculate(gradient)
         k, v = self.next_functions[0]
-        if (self.axis is not None) and (gradient.shape != k.shape):
+        # TODO: Broken
+        if (self.axis is not None) and (gradient.shape != () and gradient.shape != k.shape):
             gradient_shape = list(k.shape)
             gradient_shape[self.axis] = 1
             gradient = gradient.reshape(*gradient_shape)
         from src._tensor import tensor_ns_like
-        up(v, tensor_ns_like(k, 1/k.size), gradient)
+        up(self.next_functions[0], tensor_ns_like(
+            k, 1/k.size), gradient, print_indent=print_indent)
 
 
-class SumGradFn(OneOperatorOpGradFn):
-    def __init__(self, vars, axis=None, keepdims=False, **kwargs) -> None:
+class SumGradFn(UnaryOpGradFn):
+    def __init__(self, vars, axis=None, keepdim=False, **kwargs) -> None:
         super().__init__(vars, **kwargs)
 
         self.vvv = vars
         self.axis = axis
+        self.keepdim = keepdim
 
     @printed_grad
-    def _calculate(self, gradient):
+    def _calculate(self, gradient, print_indent=-1):
         from src._tensor import tensor_ones
-        super()._calculate()
         k, v = self.next_functions[0]
         if (self.axis is not None) and (gradient.shape != () and gradient.shape != k.shape):
             gradient_shape = list(k.shape)
             gradient_shape[self.axis] = 1
             gradient = gradient.reshape(*gradient_shape)
-        up(v, tensor_ones(k.shape), gradient)
+        super()._calculate(gradient)
+        up(self.next_functions[0], tensor_ones(k.shape),
+           gradient, print_indent=print_indent)
 
 
-class SoftmaxGradFn(OneOperatorOpGradFn):
+class SoftmaxGradFn(UnaryOpGradFn):
     def __init__(self, vars, result=None, dim=None) -> None:
         super().__init__(vars, result)
         self.axis = dim
 
     @printed_grad
-    def _calculate(self, gradient):
+    def _calculate(self, gradient, print_indent=-1):
+        super()._calculate(gradient)
         k, v = self.next_functions[0]
-        up(v, 0, 0)
+        up(self.next_functions[0], 0, 0, print_indent=print_indent)
 
 
 class CrossEntropyGradFn(BinaryOpGradFn):
@@ -267,29 +317,67 @@ class CrossEntropyGradFn(BinaryOpGradFn):
         super().__init__(vars, result)
 
     @printed_grad
-    def _calculate(self, gradient):
+    def _calculate(self, gradient, print_indent=-1):
+        super()._calculate(gradient)
         (x, v0), (y, v1) = self.next_functions
         y: _Tensor = y
         n, *_ = x.shape
         dx = x.softmax(dim=1)
         dx.data[list(range(n)), y.astype(int)] -= 1
         dx /= n
-        up(v0, dx, gradient)
+        up(self.next_functions[0], dx, gradient, print_indent=print_indent)
 
     def get_op(self): return " CE "
 
 # TODO MaximumGradFn
 # TODO ReLUGradFn
+
+
+class ReLUGradFn(UnaryOpGradFn):
+    def __init__(self, vars, result=None, **kwargs) -> None:
+        super().__init__(vars, result)
+
+    @printed_grad
+    def _calculate(self, gradient, print_indent=-1):
+        super()._calculate(gradient)
+        k, v = self.next_functions[0]
+        import numpy as np
+        gradient.data[np.where(k.relu().data == 0)] = 0
+        up(self.next_functions[0], 1, gradient, print_indent=print_indent)
+
 # TODO LogsoftmaxGradFn
 # TODO NLLLossGradFn
 
 
-class NLLGradFn(OneOperatorOpGradFn):
-    def __init__(self, vars, result=None, target=None, **kwargs) -> None:
+class ReshapeGradFn(UnaryOpGradFn):
+    def __init__(self, vars, result=None, **kwargs) -> None:
         super().__init__(vars, result)
-        self.target = target
 
     @printed_grad
-    def _calculate(self, gradient):
+    def _calculate(self, gradient, print_indent=-1):
+        super()._calculate(gradient)
+        from src._tensor import tensor_ones_like
         k, v = self.next_functions[0]
-        up(v, 0, 0)
+        gradient = gradient.reshape(k.shape)
+        up(self.next_functions[0], 1, gradient, print_indent=print_indent)
+
+
+FlattenGradFn = ReshapeGradFn
+
+
+class NLLGradFn(BinaryOpGradFn):
+    def __init__(self, vars, result=None, target=None, **kwargs) -> None:
+        super().__init__(vars, result)
+        self.result = result
+
+    @printed_grad
+    def _calculate(self, gradient, print_indent=-1):
+        super()._calculate(gradient)
+        # TODO
+        [x, v1], [t, v2] = self.next_functions
+
+        from src._tensor import tensor_zeros
+        len_ = len(t)
+        y = tensor_zeros((x.shape))
+        y.data[list(range(len_)), t.numpy().astype(int)] = -(1/len_)
+        up(self.next_functions[0], y, gradient, print_indent=print_indent)

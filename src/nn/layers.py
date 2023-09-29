@@ -1,11 +1,20 @@
 from __future__ import annotations
-from src._base import Layer
+from src._base import Layer, Function
 from typing import List
 from src.types import *
 from src import initialization
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from src._tensor import _Tensor
+
+
+class Flatten(Function):
+    def __init__(self, start_dim=1, end_dim=-1) -> None:
+        self.start_dim = start_dim
+        self.end_dim = end_dim
+
+    def forward(self, x: _Tensor) -> _Tensor:
+        return x.flatten(start_dim=self.start_dim, end_dim=self.end_dim)
 
 
 class Dense(Layer):
@@ -27,12 +36,6 @@ class Dense(Layer):
         layer.weights = tensor(weights).requires_grad_()
         return layer
 
-    def get_trainable_params(self) -> List[_Tensor]:
-        params = [self.weights]
-        if self.bias is not None:
-            params.append(self.bias)
-        return params
-
     def init_weights(self, inn, out, bias):
         from src._tensor import tensor
         import numpy as np
@@ -51,28 +54,38 @@ class Dense(Layer):
 
 
 class Conv2D(Layer):
-    def __init__(self, in_, out_, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True) -> None:
+    def __init__(
+        self,
+        inn,
+        out,
+        kernel_size,
+    ) -> None:
         super().__init__()
-        self.in_, self.out_ = in_, out_
-        self.kernel_size = kernel_size
-        self.stride = stride
-        self.dilation = dilation
-        self.padding = padding
-        self.groups = groups
 
-        from src._tensor import tensor_zeros
-        self.bias = None if not bias else tensor_zeros(self.out_)
-        # TODO
-        self.weights = self.init_weights(self.in_, self.out_, *kernel_size)
+        self.channels = inn
+        self.out = out
+        if isinstance(kernel_size, int):
+            kernel_size = (kernel_size, kernel_size)
+
+        self.init_weights(inn, out, kernel_size)
 
     def forward(self, x: _Tensor) -> _Tensor:
         return x.conv2d(
             self.weights,
-            self.bias,
-            stride=self.stride,
-            padding=self.padding,
-            groups=self.dilation,
+            bias=self.bias,
         )
+
+    def init_weights(
+        self,
+        channels,
+        out,
+        kernel_size,
+    ):
+        from src._tensor import tensor
+        import numpy as np
+        self.weights = tensor(np.random.uniform(
+            size=(out, channels, *kernel_size))).requires_grad_()
+        self.bias = tensor(np.random.uniform(size=(out,))).requires_grad_()
 
 
 class Sequential(Layer):
