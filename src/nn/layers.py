@@ -14,7 +14,8 @@ class Flatten(Function):
         self.end_dim = end_dim
 
     def forward(self, x: _Tensor) -> _Tensor:
-        return x.flatten(start_dim=self.start_dim, end_dim=self.end_dim)
+        res = x.flatten(start_dim=self.start_dim, end_dim=self.end_dim)
+        return res
 
 
 class Dense(Layer):
@@ -59,6 +60,8 @@ class Conv2D(Layer):
         inn,
         out,
         kernel_size,
+        padding,
+        stride=1,
     ) -> None:
         super().__init__()
 
@@ -66,25 +69,41 @@ class Conv2D(Layer):
         self.out = out
         if isinstance(kernel_size, int):
             kernel_size = (kernel_size, kernel_size)
+        if isinstance(stride, int):
+            stride = (stride, stride)
 
-        self.init_weights(inn, out, kernel_size)
+        self.init_weights(inn, out, kernel_size, stride)
+
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.padding = padding
 
     def forward(self, x: _Tensor) -> _Tensor:
-        return x.conv2d(
-            self.weights,
+        from src._tensor import tensor_zeros
+        b, c, d1, d2 = x.shape
+        output_shape = (b, self.out, d1, d2)
+        output = tensor_zeros(output_shape).requires_grad_()
+        x.conv2d(
+            kernels=self.weights,
             bias=self.bias,
+            output=output,
+            padding=self.padding,
+            stride=self.stride
         )
+        return output
 
     def init_weights(
         self,
         channels,
         out,
         kernel_size,
+        stride,
     ):
         from src._tensor import tensor
         import numpy as np
-        self.weights = tensor(np.random.uniform(
-            size=(out, channels, *kernel_size))).requires_grad_()
+        self.weights = tensor(
+            np.random.uniform(size=(out, channels, *kernel_size)),
+        ).requires_grad_()
         self.bias = tensor(np.random.uniform(size=(out,))).requires_grad_()
 
 

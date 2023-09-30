@@ -145,7 +145,8 @@ class AddGradFn(BinaryOpGradFn):
             new_grad = gradient
             if isinstance(gradient, _Tensor) and isinstance(v, _Tensor) and v.shape != gradient.shape:
                 new_grad = correct_shape(v, gradient)
-            up([v, grad_fn], 1, new_grad, print_indent=print_indent)
+            _pass_gradient([v, grad_fn], 1, new_grad,
+                           print_indent=print_indent)
 
 
 class SubGradFn(BinaryOpGradFn):
@@ -159,7 +160,8 @@ class SubGradFn(BinaryOpGradFn):
             new_grad = gradient
             if isinstance(gradient, _Tensor) and isinstance(v, _Tensor) and v.shape != gradient.shape:
                 new_grad = correct_shape(v, gradient)
-            up([v, grad_fn], M, new_grad, print_indent=print_indent)
+            _pass_gradient([v, grad_fn], M, new_grad,
+                           print_indent=print_indent)
 
 
 class MulGradFn(BinaryOpGradFn):
@@ -171,8 +173,10 @@ class MulGradFn(BinaryOpGradFn):
 
         (x, v0), (y, v1) = self.next_functions
 
-        up(self.next_functions[0], y, gradient, print_indent=print_indent)
-        up(self.next_functions[1], x, gradient, print_indent=print_indent)
+        _pass_gradient(self.next_functions[0],
+                       y, gradient, print_indent=print_indent)
+        _pass_gradient(self.next_functions[1],
+                       x, gradient, print_indent=print_indent)
 
 
 class PowGradFn(BinaryOpGradFn):
@@ -182,10 +186,10 @@ class PowGradFn(BinaryOpGradFn):
     def _calculate(self, gradient, print_indent=-1):
         super()._calculate(gradient)
         (x, v0), (y, v1) = self.next_functions
-        up(self.next_functions[0], y * (x ** (y-1)),
-           gradient, print_indent=print_indent)
-        up(self.next_functions[1], (x ** y)*x.log(),
-           gradient, print_indent=print_indent)
+        _pass_gradient(self.next_functions[0], y * (x ** (y-1)),
+                       gradient, print_indent=print_indent)
+        _pass_gradient(self.next_functions[1], (x ** y)*x.log(),
+                       gradient, print_indent=print_indent)
 
 
 def _print_gradient(gradient, indent, fromm):
@@ -194,7 +198,7 @@ def _print_gradient(gradient, indent, fromm):
     print(" "*indent*5, fromm.__class__.__name__, "grad\n", gradient)
 
 
-def up(next: GradFn, mul, gradient, matmul=False, print_indent=-1):
+def _pass_gradient(next: GradFn, mul, gradient, matmul=False, print_indent=-1):
     var, grad_fn = next
     if grad_fn:
         res = mul*gradient if not matmul else mul@gradient
@@ -220,8 +224,10 @@ class DivGradFn(BinaryOpGradFn):
         if isinstance(gradient2, _Tensor) and isinstance(y, _Tensor) and y.shape != gradient2.shape:
             gradient2 = correct_shape(y, gradient2)
 
-        up(self.next_functions[0], 1/y, gradient, print_indent=print_indent)
-        up(self.next_functions[1], 1, gradient2, print_indent=print_indent)
+        _pass_gradient(
+            self.next_functions[0], 1/y, gradient, print_indent=print_indent)
+        _pass_gradient(self.next_functions[1], 1,
+                       gradient2, print_indent=print_indent)
 
 
 class MatMulGradFn(BinaryOpGradFn):
@@ -233,10 +239,10 @@ class MatMulGradFn(BinaryOpGradFn):
         super()._calculate(gradient)
         # x @ y
         (x, v0), (y, v1) = self.next_functions
-        up(self.next_functions[0], gradient,
-           y.T, True, print_indent=print_indent)
-        up(self.next_functions[1], x.T, gradient,
-           True, print_indent=print_indent)
+        _pass_gradient(self.next_functions[0], gradient,
+                       y.T, True, print_indent=print_indent)
+        _pass_gradient(self.next_functions[1], x.T, gradient,
+                       True, print_indent=print_indent)
 
 # x = x+0
 
@@ -257,8 +263,8 @@ class ExpGradFn(UnaryOpGradFn):
     def _calculate(self, gradient, print_indent=-1):
         super()._calculate(gradient)
         k, v = self.next_functions[0]
-        up(self.next_functions[0], k.exp(),
-           gradient, print_indent=print_indent)
+        _pass_gradient(self.next_functions[0], k.exp(),
+                       gradient, print_indent=print_indent)
 
 
 def acc(grad, new):
@@ -270,7 +276,8 @@ class LogGradFn(UnaryOpGradFn):
     def _calculate(self, gradient, print_indent=-1):
         super()._calculate(gradient)
         k, v = self.next_functions[0]
-        up(self.next_functions[0], 1/k, gradient, print_indent=print_indent)
+        _pass_gradient(
+            self.next_functions[0], 1/k, gradient, print_indent=print_indent)
 
 
 class MeanGradFn(UnaryOpGradFn):
@@ -288,7 +295,7 @@ class MeanGradFn(UnaryOpGradFn):
             gradient_shape[self.axis] = 1
             gradient = gradient.reshape(*gradient_shape)
         from src._tensor import tensor_ns_like
-        up(self.next_functions[0], tensor_ns_like(
+        _pass_gradient(self.next_functions[0], tensor_ns_like(
             k, 1/k.size), gradient, print_indent=print_indent)
 
 
@@ -309,20 +316,8 @@ class SumGradFn(UnaryOpGradFn):
             gradient_shape[self.axis] = 1
             gradient = gradient.reshape(*gradient_shape)
         super()._calculate(gradient)
-        up(self.next_functions[0], tensor_ones(k.shape),
-           gradient, print_indent=print_indent)
-
-
-class SoftmaxGradFn(UnaryOpGradFn):
-    def __init__(self, vars, result=None, dim=None) -> None:
-        super().__init__(vars, result)
-        self.axis = dim
-
-    @printed_grad
-    def _calculate(self, gradient, print_indent=-1):
-        super()._calculate(gradient)
-        k, v = self.next_functions[0]
-        up(self.next_functions[0], 0, 0, print_indent=print_indent)
+        _pass_gradient(self.next_functions[0], tensor_ones(k.shape),
+                       gradient, print_indent=print_indent)
 
 
 class CrossEntropyGradFn(BinaryOpGradFn):
@@ -339,12 +334,10 @@ class CrossEntropyGradFn(BinaryOpGradFn):
         dx = x.softmax(dim=1)
         dx.data[list(range(n)), y.astype(int)] -= 1
         dx /= n
-        up(self.next_functions[0], dx, gradient, print_indent=print_indent)
+        _pass_gradient(
+            self.next_functions[0], dx, gradient, print_indent=print_indent)
 
     def get_op(self): return " CE "
-
-# TODO MaximumGradFn
-# TODO ReLUGradFn
 
 
 class ReLUGradFn(UnaryOpGradFn):
@@ -357,10 +350,8 @@ class ReLUGradFn(UnaryOpGradFn):
         k, v = self.next_functions[0]
         import numpy as np
         gradient.data[np.where(k.relu().data == 0)] = 0
-        up(self.next_functions[0], 1, gradient, print_indent=print_indent)
-
-# TODO LogsoftmaxGradFn
-# TODO NLLLossGradFn
+        _pass_gradient(self.next_functions[0],
+                       1, gradient, print_indent=print_indent)
 
 
 class ReshapeGradFn(UnaryOpGradFn):
@@ -370,10 +361,10 @@ class ReshapeGradFn(UnaryOpGradFn):
     @printed_grad
     def _calculate(self, gradient, print_indent=-1):
         super()._calculate(gradient)
-        from src._tensor import tensor_ones_like
         k, v = self.next_functions[0]
         gradient = gradient.reshape(k.shape)
-        up(self.next_functions[0], 1, gradient, print_indent=print_indent)
+        _pass_gradient(self.next_functions[0],
+                       1, gradient, print_indent=print_indent)
 
 
 FlattenGradFn = ReshapeGradFn
@@ -389,9 +380,24 @@ class NLLGradFn(BinaryOpGradFn):
         super()._calculate(gradient)
         # TODO
         [x, v1], [t, v2] = self.next_functions
-
         from src._tensor import tensor_zeros
         len_ = len(t)
         y = tensor_zeros((x.shape))
         y.data[list(range(len_)), t.numpy().astype(int)] = -(1/len_)
-        up(self.next_functions[0], y, gradient, print_indent=print_indent)
+        _pass_gradient(self.next_functions[0],
+                       y, gradient, print_indent=print_indent)
+
+
+class SoftmaxGradFn(UnaryOpGradFn):
+    def __init__(self, vars, result=None, dim=None) -> None:
+        super().__init__(vars, result)
+        self.axis = dim
+
+    @printed_grad
+    def _calculate(self, gradient, print_indent=-1):
+        super()._calculate(gradient)
+        raise NotImplementedError()
+# TODO LogsoftmaxGradFn
+# TODO NLLLossGradFn
+# TODO MaximumGradFn
+# TODO ReLUGradFn

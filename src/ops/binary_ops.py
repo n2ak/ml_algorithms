@@ -27,8 +27,13 @@ def _bin_op(func, x, other):
     from src._tensor import tensor
     res = tensor(func(np.array(x), np.array(other)))
     if np.isfinite(res).mean() != 1:
-        print("Infinite value, func:", func.__name__)
-        pass
+        print(
+            "Infinite value, func:",
+            func.__name__,
+            x,
+            other,
+        )
+        assert False
     return res
 
 

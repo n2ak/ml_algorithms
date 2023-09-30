@@ -71,8 +71,30 @@ def _conv2d_output_shape(x: _Tensor, out_, ks, p=0, s=1, d=0):
 @printed_other_ops
 def conv2d(
     x: _Tensor,
-    weights: _Tensor,
+    kernels: _Tensor,
+    output: _Tensor,
+    padding="same",
     bias: _Tensor = None,
+    stride=None
 ):
-
+    from src._tensor import tensor
+    s1, s2 = stride
+    b, c, k1, k2 = kernels.shape
+    b, c, d1, d2 = x.shape
+    index_x, index_y = 0, 0
+    x = x.copy()
+    if padding == "same":
+        S, W, K = s1, d1, k1
+        padding = ((W-1)*S-W+K)
+        padding = padding//2
+    x.data = np.pad(
+        x.data, ((0, 0), (0, 0), (padding, padding), (padding, padding)))
+    b, c, d1, d2 = x.shape
+    x.data = np.expand_dims(x.data, 1)
+    for index_x in range(0, d1-k1+1, s1):
+        for index_y in range(0, d2-k2+1, s2):
+            a = x.data[:, :, :, index_x:index_x+k1, index_y:index_y+k2]
+            res = a*kernels
+            res = res.sum(axis=(-1, -2, -3))
+            output.data[:, :, index_x, index_y] = res
     return x

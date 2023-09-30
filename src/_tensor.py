@@ -49,8 +49,9 @@ class _Tensor:
 
     def reshape(self, *shape):
         # No copy
-        self.data = self.data.reshape(*shape)
-        return self
+        t = self.copy()
+        t.data = t.data.reshape(*shape)
+        return t
 
     def _accumulate_grad(self, gradient):
         grad = self.grad

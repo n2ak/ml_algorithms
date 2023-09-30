@@ -31,6 +31,10 @@ def sigmoid(tensor: _Tensor) -> _Tensor:
 @printed_act
 @as_activation_layer(name="Softmax")
 def softmax(x: _Tensor, dim: int = -1) -> _Tensor:
+    m = x - x.data.max(axis=dim, keepdims=True)
+    e = m.exp()
+    _, e, ss = m, e, e.sum(axis=dim, keepdim=True)
+    return e/ss
     # avoids overflow , https://timvieira.github.io/blog/post/2014/02/11/exp-normalize-trick/
     x = (x - x.numpy().max()).exp()
     x = x/(x.sum(axis=dim, keepdim=True))

@@ -8,7 +8,8 @@ torch.manual_seed(0)
 
 def train_tick(model, optim, loss_fn, X, Y):
     optim.zero_grad()
-    x = model(X)
+    x = model(X)  # .relu()  # .softmax(dim=-1)
+
     loss = loss_fn(x, Y)
     try:
         # plot_graph(loss,figsize=(20,20))

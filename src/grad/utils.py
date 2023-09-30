@@ -1,48 +1,26 @@
 from __future__ import annotations
 import contextlib
-from typing import TYPE_CHECKING, Callable, Any, ClassVar
+from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
 
     from src._tensor import _Tensor
     from src.grad import GradFn
 
-import contextlib
-
-# Note we use file to store gradu status, the called GradAvail object first is not the same as the other ones
+_grad_stack = [True]
 
 
-class GradAvail:
-    _init = True
-    _path = "status.txt"
-
-    @classmethod
-    def _prev(cls):
-        import os
-        if not os.path.exists(cls._path):
-            return cls._init
-        with open(cls._path, "r") as f:
-            content = f.read()
-            return content == "True"
-
-    @classmethod
-    def _set_grad(cls, status):
-        status = bool(status)
-        with open(cls._path, "wt") as f:
-            f.write(str(status))
+@contextlib.contextmanager
+def grad_off():
+    global _grad_stack
+    _grad_stack.append(False)
+    yield
+    _grad_stack.pop()
 
 
-class grad_off:
-    def __enter__(self) -> None:
-        self.prev = GradAvail._prev()
-        GradAvail._set_grad(False)
-
-    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
-        GradAvail._set_grad(self.prev)
-
-
-def can_register_grad():
-    return GradAvail._prev()
+def _can_register_grad():
+    assert len(_grad_stack)
+    return _grad_stack[-1]
 
 
 def register_grad_fn(cls: GradFn, reverse=False):
@@ -52,7 +30,7 @@ def register_grad_fn(cls: GradFn, reverse=False):
 
         @functools.wraps(method)
         def new_method(*args, **kwargs) -> _Tensor:
-            if can_register_grad() is False:
+            if _can_register_grad() is False:
                 return method(*args, **kwargs)
             with grad_off():
                 result = method(*args, **kwargs)

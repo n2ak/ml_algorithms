@@ -9,12 +9,12 @@ indent = 0
 print_ok = False
 max_depth = 5
 printable = [
-    # "loss",
-    # "act",
-    "back"
-    # "unary_ops",
-    # "binary_ops",
-    # "other_ops",
+    "loss",
+    "act",
+    # "back"
+    "unary_ops",
+    "binary_ops",
+    "other_ops",
 ]
 
 
@@ -34,7 +34,7 @@ def _printed(type=None, arg_print=None):
             global indent
             if indent == 0:
                 print("------------------------------------")
-            print(" "*(indent*5), f"{func.__qualname__}", func)
+            print(" "*(indent*5), f"{func.__qualname__}")
             if arg_print is not None:
                 print(" "*(indent*5), f"called with")
                 for arg in args:
