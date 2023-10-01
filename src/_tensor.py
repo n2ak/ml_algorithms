@@ -186,7 +186,7 @@ class _Tensor:
 
     def torch(self):
         import torch
-        return torch.tensor(self.numpy(), requires_grad=self.requires_grad)
+        return torch.from_numpy(self.numpy()).requires_grad_(self.requires_grad)
 
     @classmethod
     def rand(cls, *args): return tensor(np.random.rand(*args))

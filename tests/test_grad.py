@@ -82,6 +82,7 @@ def test_binary_ops():
         (matmul, (lambda x, b: x@b),
          (np.random.random((4, 2)), np.random.random((2, 3))), None),
         (neg, (lambda x: -x), (np.random.random((2, 3, 4)),), None),
+        (pow, (lambda x, b: x**b), (np.random.random((2, 3, 4)), 2), None),
     ]
     __test(ops)
 

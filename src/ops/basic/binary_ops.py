@@ -1,26 +1,14 @@
 from __future__ import annotations
-import traceback
-from src.grad import *
 from typing import TYPE_CHECKING
+from src.grad import AddGradFn, SubGradFn, MulGradFn, PowGradFn, DivGradFn, MatMulGradFn
 import numpy as np
 from src.grad.utils import register_grad_fn
-from src.utils import _printed
-printed_binary_ops = _printed("binary_ops")
+from ..utils import printed_ops
 
-__all__ = [
-    "add",
-    "sub",
-    "mul",
-    "pow",
-    "truediv",
-    "rtruediv",
-    "matmul",
-    "neg",
-]
 if TYPE_CHECKING:
     from src._tensor import _Tensor
 
-# @printed_binary_ops
+# @printed_ops
 
 
 def _bin_op(func, x, other):
@@ -37,48 +25,48 @@ def _bin_op(func, x, other):
     return res
 
 
-@printed_binary_ops
+@printed_ops
 @register_grad_fn(AddGradFn)
 def add(x: _Tensor, other) -> _Tensor:
     return _bin_op(np.add, x, other)
 
 
-@printed_binary_ops
+@printed_ops
 @register_grad_fn(SubGradFn)
 def sub(x: _Tensor, other) -> _Tensor:
     return _bin_op(np.subtract, x, other)
 
 
-@printed_binary_ops
+@printed_ops
 @register_grad_fn(MulGradFn)
 def mul(x: _Tensor, other) -> _Tensor:
     return _bin_op(np.multiply, x, other)
 
 
-@printed_binary_ops
+@printed_ops
 @register_grad_fn(PowGradFn)
 def pow(x: _Tensor, other) -> _Tensor:
     return _bin_op(np.power, x, other)
 
 
-@printed_binary_ops
+@printed_ops
 @register_grad_fn(DivGradFn)
 def truediv(x: _Tensor, other) -> _Tensor:
     return _bin_op(np.divide, x, other)
 
 
-@printed_binary_ops
+@printed_ops
 @register_grad_fn(DivGradFn, reverse=True)
 def rtruediv(x: _Tensor, other) -> _Tensor:
     return _bin_op(np.divide, other, x)
 
 
-@printed_binary_ops
+@printed_ops
 @register_grad_fn(MatMulGradFn)
 def matmul(x: _Tensor, other) -> _Tensor:
     return _bin_op(np.matmul, x, other)
 
 
-@printed_binary_ops
+@printed_ops
 def neg(x: _Tensor) -> _Tensor:
     return mul(x, -1)

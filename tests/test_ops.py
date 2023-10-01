@@ -21,10 +21,11 @@ def cast_vars(vars):
     return ours, torchs
 
 
-def assert_close(var1, var2, atol=1e-6):
+def is_close(var1, var2, atol=1e-6):
     var1 = var1.numpy()
     var2 = var2.numpy()
-    print(var1, var2)
+    diff = np.abs(var1 - var2)
+    print(diff.max())
     return np.allclose(var1, var2, atol=atol)
 
 
@@ -33,7 +34,7 @@ def __test(ops):
         ours, torchs = cast_vars(vars)
         val1 = our_op(*ours)
         val2 = torch_op(*torchs)
-        assert assert_close(val1, val2), f"Op: {our_op.__name__}"
+        assert is_close(val1, val2), f"Op: {our_op.__name__}"
 
 
 def test_binary_ops():
@@ -49,6 +50,7 @@ def test_binary_ops():
         (matmul, (lambda x, b: x@b),
          (np.random.random((2, 3, 4)), np.random.random((4, 3)))),
         (neg, (lambda x: -x), (np.random.random((2, 3, 4)),)),
+        (pow, (lambda x, b: x**b), (np.random.random((2, 3, 4)), 2)),
     ]
     __test(ops)
 
@@ -74,7 +76,23 @@ def test_other_ops():
             print(v.data)
         val1 = our_op(*ours, **kwargs._asdict())
         val2 = torch_op(*torchs, **kwargs._asdict())
-        assert assert_close(
+        assert is_close(
             val1, val2), f"Op: {our_op.__name__},kwargs: {(kwargs)}"
 
 # def test_activatio=
+
+
+def test_conv2d():
+    import torch
+    from src import ops, tensor
+
+    inn = torch.arange(1*3*32*32).view((1, 3, 32, 32)).float()
+    cnn = torch.nn.Conv2d(3, 10, (3, 3))
+    weights = cnn.weight
+    weights = tensor(cnn.weight.detach().numpy())
+    res1 = cnn(inn)
+    res2 = ops.conv2d(
+        tensor(inn.numpy()),
+        tensor(weights.numpy()),
+    )
+    assert is_close(res1.detach(), res2.detach(), atol=.19)
