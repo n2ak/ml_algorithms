@@ -65,7 +65,7 @@ def test_funcs_ops():
 def test_binary_ops():
     ops = [
         (add, (lambda x, b: x+b),
-         (np.random.random((2, 3, 4)), np.random.random((2, 3, 4))), None),
+         (np.random.random((2, 3, 4)), np.random.random((3, 4))), None),
         (add, (lambda x, b: x+b),
          (np.random.random((2, 3, 4)), 2), None),
         (sub, (lambda x, b: x-b),
@@ -167,6 +167,7 @@ def test_loss():
     ]
 
     for ourLoss, torchLoss, vars, argmax in ops:
+        print("Op", ourLoss.__class__.__name__)
         x, w, b, y = vars
         [our_x, our_y], [torch_x, torch_y] = cast_vars(
             [x, y], requires_grad=False)
@@ -190,6 +191,7 @@ def test_loss():
         assert np.allclose(loss1, loss2.detach()), f"{loss1} != {loss2}"
         loss1.backward()
         loss2.backward()
+        # assert False
         assert_close(our_w, torch_w)
         assert_close(our_b, torch_b)
 

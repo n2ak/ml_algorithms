@@ -3,7 +3,6 @@ import graphviz
 from typing import TYPE_CHECKING, Callable
 if TYPE_CHECKING:
     from src._tensor import _Tensor
-from src.grad import BinaryOpGradFn, UnaryOpGradFn, GradFn
 
 import os
 os.environ["PATH"] += os.pathsep + 'C:/Program Files/Graphviz/bin/'

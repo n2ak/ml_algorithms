@@ -1,18 +1,16 @@
 from __future__ import annotations
 from src.utils import printed_ml_ops, as_layer
 # TODO ,MaximumGradFn
-from src.grad import FlattenGradFn, ReshapeGradFn, SelectGradFn, CopySliceGradFn
 import numpy as np
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from src._tensor import _Tensor
-from src.grad.utils import register_grad_fn
+
+from src.grad.utils import register_grad, _pass_gradient
 
 
 @printed_ml_ops
-@register_grad_fn(FlattenGradFn)
 def flatten(x: _Tensor, start_dim=0, end_dim=-1):
-    x = x.copy()
     shape = x.shape
     if end_dim < 0:
         end_dim = len(shape)+end_dim
@@ -22,16 +20,18 @@ def flatten(x: _Tensor, start_dim=0, end_dim=-1):
     return x.reshape(new_shape)
 
 
-@register_grad_fn(ReshapeGradFn)
-def reshape(self, shape):
+@register_grad()
+def reshape(x, shape):
+    def backward(gradient):
+        gradient = gradient.reshape(shape=x.shape)
+        _pass_gradient(x, gradient)
     # No copy
-    t = self.copy()
+    t = x.copy()
     t.data = t.data.reshape(*shape)
-    return t
+    return t, backward
 
 
 @printed_ml_ops
-# @register_grad_fn(LinearGradFn)
 def linear(a: _Tensor, w: _Tensor, b: _Tensor) -> _Tensor:
     """
     returns a*w+b
@@ -194,15 +194,22 @@ def squeeze(x, dim=None):
     return x.reshape(shape=new_shape)
 
 
-@register_grad_fn(SelectGradFn)
-def select(x, args=None):
+@register_grad()
+def select(x, args):
+    def backward(gradient):
+        aa = tensor.ones_like(x)*0
+        aa.data[args] = gradient.data
+        _pass_gradient(x, aa)
+
     from src import tensor
-    x = tensor.from_numpy(x.data[args]).requires_grad_(x.requires_grad)
-    return x
+    xx = tensor.from_numpy(x.data[args]).requires_grad_(x.requires_grad)
+    return xx, backward
 
 
-@register_grad_fn(CopySliceGradFn)
+@register_grad()
 def copy_slice(x, slices=None, y=None):
+    def backward(gradient):
+        raise NotImplementedError()
     x = x.copy()
     x.data[slices] = y.copy().data
-    return x
+    return x, backward

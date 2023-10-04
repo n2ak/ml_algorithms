@@ -8,17 +8,24 @@ class _Tensor:
 
     _is_leaf = True
     _grad = None
-    from src.grad import GradFn
-    grad_fn: GradFn | None = None
+    grad_fn:  None = None
     requires_grad = False
 
-    def __init__(self, data: np.ndarray, requires_grad=False) -> None:
+    def __init__(self, data: np.ndarray) -> None:
         super().__init__()
-        self._init(requires_grad)
+        self._init()
         self.data = data
         self.name = ""
+        self._backward = None
 
     def requires_grad_(self, requires_grad=True):
+        if requires_grad and self.requires_grad != requires_grad:
+            print("Setting")
+
+            def accumulate_backward(grad):
+                self._accumulate_grad(grad)
+            accumulate_backward._fn_name = "AccumulateBackward"
+            self._backward = accumulate_backward
         self.requires_grad = requires_grad
         return self
 
@@ -45,10 +52,11 @@ class _Tensor:
     def copy(self):
         # TODO: might be wrong
         copy = tensor.from_numpy(
-            self.data.copy(), requires_grad=self.requires_grad)
+            self.data.copy()).requires_grad_(self.requires_grad)
         return copy
 
     def _accumulate_grad(self, gradient):
+        assert self.requires_grad
         grad = self.grad
         if grad is None:
             grad = tensor.from_numpy(0)
@@ -66,11 +74,10 @@ class _Tensor:
         if self._grad is not None:
             self.set_grad(tensor.zeros_like(self._grad))
 
-    def _init(self, requires_grad):
+    def _init(self):
         self._is_leaf = True
         self._grad = None
         self.grad_fn = None
-        self.requires_grad = requires_grad
 
     def float(self):
         self.data = self.data.astype(float)
@@ -81,10 +88,10 @@ class _Tensor:
         return self
 
     @classmethod
-    def array(cls, arr: _Tensor | np.ndarray | list, dtype=np.float32, requires_grad=False) -> _Tensor:
+    def array(cls, arr: _Tensor | np.ndarray | list, dtype=np.float32) -> _Tensor:
         arr = np.array(arr, dtype=dtype)
         arr = cls(arr)
-        arr._init(requires_grad)
+        arr._init()
         return arr
 
     @staticmethod
@@ -110,26 +117,22 @@ class _Tensor:
 
     def is_a_leaf(self): return self._is_leaf
 
-    def can_calculatebackward(self, g):
-        if self.is_a_leaf() and self.grad_fn is None:
-            # TODO: IdentityGradFn
-            # self.grad_fn = IdentityGradFn([self])
-            pass
-        if self.grad_fn is None:
-            raise Exception("No grad function")
-        if self.requires_grad == False:
-            raise Exception(
-                "Tensor must require grad to perform this operation")
-        if not self.is_scalar():
-            raise Exception("Cannot calculate gradient of a non-scalar")
+    def can_calculatebackward(self):
+        if self._backward is None:
+            return False
         return True
 
     def backward(self, gradient=1, print_ok=False):
         if not isinstance(gradient, _Tensor):
             gradient = tensor.from_numpy(gradient)
-        assert self.can_calculatebackward(gradient)
-        assert np.isfinite(self.data), f"Value is infinite: {self.data}"
-        self.grad_fn.calculate(gradient, print_ok=print_ok)
+        print("calling", self._backward._fn_name, gradient.shape, self.shape)
+        assert self.can_calculatebackward()
+        # TODO
+        # assert np.isfinite(self.data), f"Value is infinite: {self.data}"
+        # print("calling", gradient.shape, self.shape, self._backward._fn_name)
+        if self._backward._fn_name != "AccumulateBackward":
+            self._accumulate_grad(gradient)
+        self._backward(gradient)
 
     def is_scalar(self):
         # return np.isscalar(self)
@@ -213,7 +216,7 @@ class _Tensor:
     #     copy.data = func()
 
     def argmax(self, *args):
-        return tensor.from_numpy(self.data.argmax(*args), requires_grad=True)
+        return tensor.from_numpy(self.data.argmax(*args)).requires_grad_()
     __getitem__ = ops.select
     # __setitem__ = ops.copy_slice
 

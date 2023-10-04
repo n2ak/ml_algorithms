@@ -2,7 +2,7 @@ from __future__ import annotations
 from functools import partial
 from typing import TYPE_CHECKING
 from src.utils import printed_act, as_activation_layer
-from src.grad import register_grad_fn, ReLUGradFn
+from src.grad.utils import register_grad, _pass_gradient
 
 if TYPE_CHECKING:
     from src._tensor import _Tensor
@@ -10,12 +10,16 @@ if TYPE_CHECKING:
 
 @printed_act
 @as_activation_layer(name="ReLU")
-@register_grad_fn(ReLUGradFn)
-def relu(tensor: _Tensor) -> _Tensor:
-    tensor = tensor.copy()
-    d = tensor.numpy()
+@register_grad()
+def relu(x: _Tensor) -> _Tensor:
+    def backward(gradient):
+        import numpy as np
+        gradient.data[np.where(x.relu().data == 0)] = 0
+        _pass_gradient(x, gradient)
+    xx = x.copy()
+    d = xx.numpy()
     d[d < 0] = 0
-    return tensor
+    return xx, backward
 
 
 @printed_act

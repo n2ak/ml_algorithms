@@ -2,10 +2,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from src._tensor import _Tensor
-from src.grad.utils import register_grad_fn
-from src.grad import MeanGradFn, SumGradFn, ExpGradFn, LogGradFn
 import numpy as np
 from src.utils import printed_ops
+from src.grad.utils import register_grad, _pass_gradient
 
 
 def _unary_op(func, x: _Tensor, **kwargs):
@@ -14,26 +13,42 @@ def _unary_op(func, x: _Tensor, **kwargs):
 
 
 @printed_ops
-@register_grad_fn(MeanGradFn)
+@register_grad()
 def mean(x: _Tensor, axis=None) -> _Tensor:
-    return _unary_op(np.mean, x, axis=axis)
+    def backward(gradient):
+        if (axis is not None) and (gradient.shape != () and gradient.shape != x.shape):
+            gradient_shape = list(x.shape)
+            gradient_shape[axis] = 1
+            gradient = gradient.reshape(shape=gradient_shape)
+        from src import tensor
+        _pass_gradient(x, tensor.ns_like(x, 1/x.size) * gradient)
+    return _unary_op(np.mean, x, axis=axis), backward
 
 
-@printed_ops
-@register_grad_fn(SumGradFn)
+@register_grad()
 def sum(x: _Tensor, axis=None, keepdim=False) -> _Tensor:
-    return _unary_op(np.sum, x, axis=axis, keepdims=keepdim)
+    from src import tensor
+
+    def backward(gradient):
+        if (axis is not None) and (gradient.shape != () and gradient.shape != x.shape):
+            gradient_shape = list(x.shape)
+            gradient_shape[axis] = 1
+            gradient = gradient.reshape(shape=gradient_shape)
+        _pass_gradient(x, tensor.ones(x.shape) * gradient)
+    return _unary_op(np.sum, x, axis=axis, keepdims=keepdim), backward
 
 
 @printed_ops
-@register_grad_fn(ExpGradFn)
+@register_grad()
 def exp(x: _Tensor) -> _Tensor:
-    return _unary_op(np.exp, x)
+    def backward(gradient):
+        _pass_gradient(x, x.exp() * gradient)
+    return _unary_op(np.exp, x), backward
 
 
 @printed_ops
-@register_grad_fn(LogGradFn)
+@register_grad()
 def log(x: _Tensor) -> _Tensor:
-    res = _unary_op(np.log, x)
-    # from src.tensor import tensor
-    return res
+    def backward(gradient):
+        _pass_gradient(x, 1/x * gradient)
+    return _unary_op(np.log, x), backward
