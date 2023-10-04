@@ -14,8 +14,6 @@ def __test(ops, named=True):
         ours, torchs = cast_vars(vars)
         if kwargs is None:
             kwargs = dict()
-        else:
-            kwargs = kwargs._asdict()
         if not named:
             kwargs = kwargs.values()
             val1 = our_op(*ours, *kwargs)
@@ -88,38 +86,44 @@ def test_binary_ops():
 
 
 def test_unary_ops():
-    Params = namedtuple("Params", ["start_dim", "end_dim"])
     ops = [
         (exp, torch.exp, (np.random.random((2, 3, 4)),), None),
         (log, torch.log, (np.random.random((2, 3, 4)),), None),
         (flatten, torch.flatten, (np.random.random((2, 3, 4)),), None),
         (flatten, torch.flatten, (np.random.random(
-            (2, 3, 4, 5)),), Params(start_dim=1, end_dim=-2)),
+            (2, 3, 4, 5)),), {"start_dim": 1, "end_dim": -2}),
     ]
     __test(ops, named=True)
 
 
 def test_other_ops():
-    Params = namedtuple("Params", ["axis", "keepdim"])
     ops = [
         (mean, torch.mean, (np.random.random((2, 3, 4)),), None),
         # (mean, torch.mean, (np.random.random((2, 3, 4)),), Params(axis=1)),
         (sum, torch.sum, (np.random.random((2, 3, 4)),), None),
-        (sum, torch.sum, (np.random.random((2, 3, 4)),), Params(axis=2, keepdim=True)),
+        (sum, torch.sum, (np.random.random((2, 3, 4)),),
+         {"axis": 2, "keepdim": True}),
+        (unsqueeze, torch.unsqueeze,
+         (np.random.random((2, 4)),), {"dim": 1}),
+        (squeeze, torch.squeeze, (np.random.random((2, 1, 1, 1, 4)),), None),
+        (squeeze, torch.squeeze,
+         (np.random.random((2, 1, 1, 4)),), {"dim": 1}),
+        (squeeze, torch.squeeze, (np.random.random(
+            (2, 1, 1, 1, 4)),), {"dim": (1, 3)}),
     ]
     __test(ops)
 
 
 def test_activations():
-    from src.nn.activation import softmax, log_softmax, sigmoid, relu
+    from src.nn.activation import softmax, log_softmax, sigmoid, relu, tanh
 
-    Params = namedtuple("Params", ["dim"])
     ops = [
         (relu, torch.relu, (np.random.random((2, 3))*10-5,), None),
-        (softmax, torch.softmax, (np.random.random((2, 3)),), Params(dim=-1)),
+        (softmax, torch.softmax, (np.random.random((2, 3)),), {"dim": -1}),
         (log_softmax, torch.log_softmax,
-         (np.random.random((2, 3, 4)),), Params(dim=-1)),
+         (np.random.random((2, 3, 4)),), {"dim": -1}),
         (sigmoid, torch.sigmoid, (np.random.random((2, 3, 4)),), None),
+        (tanh, torch.tanh, (np.random.random((2, 3, 4)),), None),
     ]
     __test(ops)
 
@@ -188,3 +192,74 @@ def test_loss():
         loss2.backward()
         assert_close(our_w, torch_w)
         assert_close(our_b, torch_b)
+
+
+def assert_shape(o, t):
+    oshape, tshape = tuple(o.shape), tuple(t.shape)
+    assert oshape == tshape, f"\nExpected shape: {tshape}\nFound: {oshape}"
+
+
+def test_select():
+    from src import nn, tensor
+    import torch
+    o = tensor.from_numpy(np.random.randint(
+        0, 10, (10, 20, 30, 10))).requires_grad_()
+    t = o.torch().requires_grad_()
+    ores = o[1, 10:14, :, 9].mean()
+    ores.backward()
+    tres = t[1, 10:14, :, 9].mean()
+    tres.backward()
+    print(o.grad.shape, t.grad.shape)
+    assert_close(o, t)
+
+
+# def test_copy_slice():
+#     from src import nn, tensor
+#     import torch
+#     o1 = tensor.from_numpy(np.random.randint(
+#         0, 10, (10, 20, 30, 10))).requires_grad_()
+#     o2 = tensor.from_numpy(np.random.randint(
+#         0, 10, (4, 30, 8))).requires_grad_()
+#     o3 = tensor.from_numpy(np.random.randint(
+#         0, 10, (10, 30, 4))).requires_grad_()
+#     t1 = o1.torch().requires_grad_(False)
+#     t2 = o2.torch()
+#     t3 = o3.torch()
+
+#     print("----")
+#     print(o1.grad_fn)
+#     o1[1, 10:14, :, 2:] = o2
+#     print(o1.grad_fn)
+#     o1[1, 10:, :, 4:8] = o3
+#     print(o1.grad_fn)
+#     o1.sum().backward()
+
+#     print("----")
+#     print(t1.grad_fn)
+#     t1[1, 10:14, :, 2:] = t2
+#     print(t1.grad_fn)
+#     t1[1, 10:, :, 4:8] = t3
+#     print(t1.grad_fn)
+#     t1.sum().backward()
+
+#     assert False
+
+
+def test_lstm():
+    import torch
+    import numpy as np
+    from src import nn, tensor
+    input_size, hidden_size = 100, 30
+    torch_lstm = torch.nn.LSTM(
+        input_size, hidden_size, batch_first=True, bias=False)
+    our_lstm = nn.LSTM(input_size, hidden_size)
+
+    X = tensor.from_numpy(np.random.randint(0, 10, (10, 20, 100)))
+    Y = tensor.from_numpy(np.random.randint(0, 10, (10,)))
+
+    toutput, (thn, tcn) = torch_lstm(X.torch())
+    ooutput, (ohn, ocn) = our_lstm(X)
+
+    assert_shape(ooutput, toutput)
+    assert_shape(ohn, thn)
+    assert_shape(ocn, tcn)

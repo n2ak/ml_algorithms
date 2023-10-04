@@ -6,8 +6,8 @@ def _load_dataset(loader, swap_channel=False):
     if swap_channel:
         import numpy as np
         x = np.transpose(x, (0, 3, 1, 2))
-    x = tensor(x)
-    y = tensor(y)
+    x = tensor.from_numpy(x)
+    y = tensor.from_numpy(y)
     return x, y
 
 

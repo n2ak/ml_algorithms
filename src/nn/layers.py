@@ -32,13 +32,13 @@ class Dense(Layer):
 
     @ classmethod
     def from_weights(cls, weights, bias=True):
-        from src._tensor import tensor
+        from src import tensor
         layer = Dense(*weights.shape, bias=bias)
-        layer.weights = tensor(weights).requires_grad_()
+        layer.weights = tensor.from_numpy(weights).requires_grad_()
         return layer
 
     def init_weights(self, inn, out, bias):
-        from src._tensor import tensor
+        from src import tensor
         import numpy as np
 
         self.weights = initialization.kaiming(
@@ -79,10 +79,10 @@ class Conv2D(Layer):
         self.padding = padding
 
     def forward(self, x: _Tensor) -> _Tensor:
-        from src._tensor import tensor_zeros
+        from src import tensor
         b, c, d1, d2 = x.shape
         output_shape = (b, self.out, d1, d2)
-        output = tensor_zeros(output_shape).requires_grad_()
+        output = tensor.zeros(output_shape).requires_grad_()
         x.conv2d(
             kernels=self.weights,
             bias=self.bias,
@@ -99,12 +99,13 @@ class Conv2D(Layer):
         kernel_size,
         stride,
     ):
-        from src._tensor import tensor
+        from src import tensor
         import numpy as np
-        self.weights = tensor(
+        self.weights = tensor.from_numpy(
             np.random.uniform(size=(out, channels, *kernel_size)),
         ).requires_grad_()
-        self.bias = tensor(np.random.uniform(size=(out,))).requires_grad_()
+        self.bias = tensor.from_numpy(
+            np.random.uniform(size=(out,))).requires_grad_()
 
 
 class Sequential(Layer):
@@ -125,3 +126,72 @@ class Sequential(Layer):
             if isinstance(l, _Trainable):
                 params.extend(l.get_trainable_params())
         return params
+
+# class _LSTM_LAYER:
+
+
+class LSTM_GATE(Layer):
+    def __init__(
+        self,
+        input_size,
+        hidden_size,
+        bias=False
+    ):
+        self.init_weights(input_size, hidden_size, bias=bias)
+
+    def forward(self, x, h) -> _Tensor:
+        x = (x @ self.weights[0] + h @ self.weights[1])
+        if self.bias is not None:
+            x = self.bias[0] + self.bias[1]
+        return x
+
+    def init_weights(self, input_size, hidden_size, bias=False):
+        self.weights = [
+            initialization.kaiming((input_size, hidden_size), hidden_size),
+            initialization.kaiming((hidden_size, hidden_size), hidden_size),
+        ]
+        self.bias = None
+        if bias:
+            self.bias = [
+                initialization.kaiming((hidden_size), hidden_size),
+                initialization.kaiming((hidden_size), hidden_size),
+            ]
+
+    def get_trainable_params(self) -> List[_Tensor]:
+        return
+
+
+class LSTM(Layer):
+    def __init__(
+        self,
+        input_size,
+        hidden_size,
+        bias=False
+    ) -> None:
+        self.input_gate = LSTM_GATE(input_size, hidden_size, bias=bias)
+        self.forget_gate = LSTM_GATE(input_size, hidden_size, bias=bias)
+        self.cell_gate = LSTM_GATE(input_size, hidden_size, bias=bias)
+        self.output_gate = LSTM_GATE(input_size, hidden_size, bias=bias)
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+
+    def forward(self, X) -> _Tensor:
+        N, T, C = X.shape
+        from src import tensor
+        ct = tensor.zeros((N, self.hidden_size))
+        ht = tensor.zeros((N, self.hidden_size))
+        os = tensor.zeros((N, T, self.hidden_size))
+        for i in range(T):
+            xt = tensor.from_numpy(X.data[:, i, :])  # ,100 10,100
+            ht_1 = ht
+            ct_1 = ct
+
+            it = self.input_gate(xt, ht_1).sigmoid()
+            ft = self.forget_gate(xt, ht_1).sigmoid()
+            gt = self.cell_gate(xt, ht_1).tanh()
+            ot = self.output_gate(xt, ht_1).sigmoid()
+
+            ct = ft * ct_1 + it * gt
+            ht = ot * ct.tanh()
+            os.data[:, i, :] = ot
+        return os, (ht.unsqueeze(0), ct.unsqueeze(0))

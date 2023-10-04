@@ -50,8 +50,7 @@ if __name__ == "__main__":
     path = os.path.join(path, r"..")
     sys.path.insert(0, path)
 
-    from src import Module
-    from src.nn import Dense, SGD, Sequential, ReLU, CrossEntropyLoss
+    from src.nn import Module, Dense, SGD, Sequential, ReLU, CrossEntropyLoss
     from src.dataset import load_iris
     X, Y = load_iris()
 

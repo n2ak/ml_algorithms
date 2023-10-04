@@ -23,7 +23,7 @@ class _Tensor:
         return self
 
     def set_grad_fn(self, grad_fn):
-        assert self.grad_fn is None, str(self.grad_fn)
+        assert self.grad_fn is None, f"{self.grad_fn.__class__.__name__} --> {grad_fn.__class__.__name__}"
         self.grad_fn = grad_fn
 
     @property
@@ -44,19 +44,14 @@ class _Tensor:
 
     def copy(self):
         # TODO: might be wrong
-        copy = tensor(self.data.copy(), requires_grad=self.requires_grad)
+        copy = tensor.from_numpy(
+            self.data.copy(), requires_grad=self.requires_grad)
         return copy
-
-    def reshape(self, *shape):
-        # No copy
-        t = self.copy()
-        t.data = t.data.reshape(*shape)
-        return t
 
     def _accumulate_grad(self, gradient):
         grad = self.grad
         if grad is None:
-            grad = tensor(0)
+            grad = tensor.from_numpy(0)
         grad = grad + gradient
         self.set_grad(grad)
 
@@ -69,7 +64,7 @@ class _Tensor:
     def zero_grad(self):
         # self._grad *=0
         if self._grad is not None:
-            self.set_grad(tensor_zeros_like(self._grad))
+            self.set_grad(tensor.zeros_like(self._grad))
 
     def _init(self, requires_grad):
         self._is_leaf = True
@@ -93,17 +88,17 @@ class _Tensor:
         return arr
 
     @staticmethod
-    def ns_like(x, n): return _Tensor.ns(x.shape, n)
+    def ns_like(x, n): return tensor.ns(x.shape, n)
     @staticmethod
-    def zeros_like(x): return _Tensor.ns_like(x, 0)
+    def zeros_like(x): return tensor.ns_like(x, 0)
     @staticmethod
-    def ones_like(x): return _Tensor.ns_like(x, 1)
+    def ones_like(x): return tensor.ns_like(x, 1)
     @staticmethod
-    def ns(shape, k): return tensor(np.zeros(shape)+k)
+    def ns(shape, k): return tensor.from_numpy(np.zeros(shape)+k)
     @staticmethod
-    def ones(shape): return _Tensor.ns(shape, 1)
+    def ones(shape): return tensor.ns(shape, 1)
     @staticmethod
-    def zeros(shape): return _Tensor.ns(shape, 0)
+    def zeros(shape): return tensor.ns(shape, 0)
 
     # def numpy(self): return np.add(self.data, 0)
     def numpy(self): return self.data
@@ -131,7 +126,7 @@ class _Tensor:
 
     def backward(self, gradient=1, print_ok=False):
         if not isinstance(gradient, _Tensor):
-            gradient = tensor(gradient)
+            gradient = tensor.from_numpy(gradient)
         assert self.can_calculatebackward(gradient)
         assert np.isfinite(self.data), f"Value is infinite: {self.data}"
         self.grad_fn.calculate(gradient, print_ok=print_ok)
@@ -161,6 +156,7 @@ class _Tensor:
     __imul__ = __mul__
 
     # ------------activations--------------
+    tanh = nn.activation.tanh
     relu = nn.activation.relu
     sigmoid = nn.activation.sigmoid
     softmax = nn.activation.softmax
@@ -173,8 +169,12 @@ class _Tensor:
     biased = ops.biased
     linear = ops.linear
     conv2d = ops.conv2d
-    sequential = ops.sequential
+    dropout = ops.dropout
     flatten = ops.flatten
+    reshape = ops.reshape
+    squeeze = ops.squeeze
+    unsqueeze = ops.unsqueeze
+    sequential = ops.sequential
 
     def __len__(self):
         return self.data.__len__()
@@ -189,10 +189,10 @@ class _Tensor:
         return torch.from_numpy(self.numpy()).requires_grad_(self.requires_grad)
 
     @classmethod
-    def rand(cls, *args): return tensor(np.random.rand(*args))
+    def rand(cls, *args): return tensor.from_numpy(np.random.rand(*args))
 
     @classmethod
-    def uniform(cls, shape, low=0, high=1): return tensor(
+    def uniform(cls, shape, low=0, high=1): return tensor.from_numpy(
         np.random.uniform(low, high, shape))
 
     def __repr__(self) -> str:
@@ -213,13 +213,17 @@ class _Tensor:
     #     copy.data = func()
 
     def argmax(self, *args):
-        return tensor(self.data.argmax(*args), requires_grad=True)
+        return tensor.from_numpy(self.data.argmax(*args), requires_grad=True)
+    __getitem__ = ops.select
+    # __setitem__ = ops.copy_slice
 
 
-tensor = _Tensor.array
-from_numpy = tensor
-tensor_zeros = _Tensor.zeros
-tensor_zeros_like = _Tensor.zeros_like
-tensor_ones = _Tensor.ones
-tensor_ones_like = _Tensor.ones_like
-tensor_ns_like = _Tensor.ns_like
+class tensor:
+    tensor = _Tensor.array
+    from_numpy = tensor
+    zeros = _Tensor.zeros
+    zeros_like = _Tensor.zeros_like
+    ones = _Tensor.ones
+    ones_like = _Tensor.ones_like
+    ns_like = _Tensor.ns_like
+    ns = _Tensor.ns

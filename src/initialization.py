@@ -25,8 +25,8 @@ def kaiming(
     else:
         raise NotImplementedError(f"Unknown distribution: {distribution}")
 
-    from src._tensor import tensor
-    return tensor(t)
+    from src import tensor
+    return tensor.from_numpy(t)
 
 
 def get_gain(fun: str):

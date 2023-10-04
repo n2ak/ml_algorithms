@@ -3,17 +3,15 @@ from typing import TYPE_CHECKING
 from src.grad import AddGradFn, SubGradFn, MulGradFn, PowGradFn, DivGradFn, MatMulGradFn
 import numpy as np
 from src.grad.utils import register_grad_fn
-from ..utils import printed_ops
+from src.utils import printed_ops
 
 if TYPE_CHECKING:
     from src._tensor import _Tensor
 
-# @printed_ops
-
 
 def _bin_op(func, x, other):
-    from src._tensor import tensor
-    res = tensor(func(np.array(x), np.array(other)))
+    from src import tensor
+    res = tensor.from_numpy(func(np.array(x), np.array(other)))
     if np.isfinite(res).mean() != 1:
         print(
             "Infinite value, func:",

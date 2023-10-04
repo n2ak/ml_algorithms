@@ -1,13 +1,12 @@
 from __future__ import annotations
-from src.grad import FlattenGradFn  # TODO ,MaximumGradFn
+from src.utils import printed_ml_ops, as_layer
+# TODO ,MaximumGradFn
+from src.grad import FlattenGradFn, ReshapeGradFn, SelectGradFn, CopySliceGradFn
 import numpy as np
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from src._tensor import _Tensor
 from src.grad.utils import register_grad_fn
-
-from src.utils import _printed
-printed_ml_ops = _printed("other_ops")
 
 
 @printed_ml_ops
@@ -21,6 +20,14 @@ def flatten(x: _Tensor, start_dim=0, end_dim=-1):
     new_shape = * \
         shape[:start_dim], np.prod(shape[start_dim:end_dim]), *shape[end_dim:]
     return x.reshape(new_shape)
+
+
+@register_grad_fn(ReshapeGradFn)
+def reshape(self, shape):
+    # No copy
+    t = self.copy()
+    t.data = t.data.reshape(*shape)
+    return t
 
 
 @printed_ml_ops
@@ -77,7 +84,7 @@ def conv2d(
     use_torch = True
     input_unf = unfold(x.numpy(), kernel_size,
                        use_torch=use_torch).requires_grad_(x.requires_grad)
-    weight = weight.reshape(weight.shape[0], -1).T
+    weight = weight.reshape(shape=(weight.shape[0], -1)).T
     res = (input_unf@weight)
     print(res.shape)
     res.data = res.data.transpose(0, 2, 1)
@@ -109,15 +116,15 @@ def unfold(input, kernel_size, pad=0, stride=1, use_torch=True):
                                             y:y_max:stride, x:x_max:stride]
 
         col = col.transpose(0, 4, 5, 1, 2, 3).reshape(N, out_h*out_w, -1)
-        from src._tensor import tensor
-        return tensor(col)
+        from src import tensor
+        return tensor.from_numpy(col)
     else:
         import torch
-        from src._tensor import from_numpy
+        from src import tensor
         x = input
         x = torch.tensor(x)
         x = torch.nn.functional.unfold(x, kernel_size)
-        x = from_numpy(x.numpy().transpose(0, 2, 1))
+        x = tensor.from_numpy(x.numpy().transpose(0, 2, 1))
     return x
 
 
@@ -141,13 +148,61 @@ def fold(col, shape, kernel_size, pad=0, stride=1, use_torch=True):
                 img[:, :, y:y_max:stride, x:x_max:stride] += col[:, :, y, x, :, :]
 
         res = img[:, :, pad:H + pad, pad:W + pad]
-        from src._tensor import tensor
-        return tensor(res)
+        from src import tensor
+        return tensor.from_numpy(res)
     else:
         import torch
-        from src._tensor import from_numpy
+        from src import tensor
         x = col
         x = torch.tensor(x)
         x = torch.nn.functional.fold(x, shape, kernel_size)
-        x = from_numpy(x.numpy())
+        x = tensor.from_numpy(x.numpy())
+    return x
+
+
+@as_layer(name="Dropout", include_training=True)
+def dropout(x, rate, training=True):
+    if training is False:
+        return x
+    x = x*np.random.binomial(1, rate, x.shape)
+    return x
+
+
+def unsqueeze(x, dim):
+    new_shape = list(x.shape)
+    for d in _to_iter(dim):
+        new_shape.insert(d, 1)
+    res = x.reshape(shape=new_shape)
+    return res
+
+
+def _to_iter(shape):
+    if isinstance(shape, (list, tuple)):
+        return shape
+    return [shape]
+
+
+def squeeze(x, dim=None):
+    if dim is None:
+        new_shape = tuple(filter(lambda d: d != 1, x.shape))
+    else:
+        dim = _to_iter(dim)
+        new_shape = list(x.shape)
+        for d in sorted(dim, reverse=True):
+            assert x.shape[d] == 1, f"The dim={d} is not equal to one"
+            new_shape.pop(d)
+    return x.reshape(shape=new_shape)
+
+
+@register_grad_fn(SelectGradFn)
+def select(x, args=None):
+    from src import tensor
+    x = tensor.from_numpy(x.data[args]).requires_grad_(x.requires_grad)
+    return x
+
+
+@register_grad_fn(CopySliceGradFn)
+def copy_slice(x, slices=None, y=None):
+    x = x.copy()
+    x.data[slices] = y.copy().data
     return x

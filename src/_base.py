@@ -23,7 +23,7 @@ class _HasForwardAndIsCallable(ABC):
 
     @abstractmethod
     def forward(self, *args, **kwargs) -> _Tensor:
-        raise Exception("Unimplemented")
+        raise NotImplementedError()
 
     def __call__(self, *args, **kwargs):
         return self.forward(*args, **kwargs)
@@ -34,9 +34,10 @@ class _Trainable(ABC):
     def get_trainable_params(self) -> List[_Tensor]:
         pass
 
+    def _set_parent_module(self, mod): self._parent_module = mod
+
 
 class Layer(_Trainable, _HasForwardAndIsCallable, ABC):
-
     @classmethod
     def init_weights(cls, in_, out_, *args, weights: _Tensor | None = None):
         if weights is None:

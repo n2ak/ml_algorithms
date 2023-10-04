@@ -5,12 +5,12 @@ if TYPE_CHECKING:
 from src.grad.utils import register_grad_fn
 from src.grad import MeanGradFn, SumGradFn, ExpGradFn, LogGradFn
 import numpy as np
-from ..utils import printed_ops
+from src.utils import printed_ops
 
 
 def _unary_op(func, x: _Tensor, **kwargs):
-    from src._tensor import tensor
-    return tensor(func(x.numpy(), **kwargs))
+    from src import tensor
+    return tensor.from_numpy(func(x.numpy(), **kwargs))
 
 
 @printed_ops

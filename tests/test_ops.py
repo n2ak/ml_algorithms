@@ -1,4 +1,5 @@
 from collections import namedtuple
+from src._tensor import _Tensor
 from src.ops import *
 import numpy as np
 import torch
@@ -7,12 +8,12 @@ torch.manual_seed(0)
 
 
 def cast_vars(vars):
-    from src._tensor import tensor
+    from src import tensor
     ours = []
     torchs = []
     for var in vars:
         if isinstance(var, np.ndarray):
-            v1 = tensor(var.copy())
+            v1 = tensor.from_numpy(var.copy())
             v2 = torch.from_numpy(var)
         else:
             v1 = v2 = var
@@ -89,10 +90,26 @@ def test_conv2d():
     inn = torch.arange(1*3*32*32).view((1, 3, 32, 32)).float()
     cnn = torch.nn.Conv2d(3, 10, (3, 3))
     weights = cnn.weight
-    weights = tensor(cnn.weight.detach().numpy())
+    weights = tensor.from_numpy(cnn.weight.detach().numpy())
     res1 = cnn(inn)
     res2 = ops.conv2d(
-        tensor(inn.numpy()),
-        tensor(weights.numpy()),
+        tensor.from_numpy(inn.numpy()),
+        tensor.from_numpy(weights.numpy()),
     )
     assert is_close(res1.detach(), res2.detach(), atol=.19)
+
+
+def test_dropout():
+    from src.nn import Module, Dropout
+    from src import tensor
+
+    class C(Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.d = Dropout(rate=.3)
+
+        def forward(self, t) -> _Tensor:
+            return self.d(t)
+    d = C()
+
+    d(tensor.from_numpy(10))

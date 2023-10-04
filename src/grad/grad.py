@@ -4,16 +4,9 @@ from typing import List, Tuple, TYPE_CHECKING
 from src.grad.utils import grad_off
 if TYPE_CHECKING:
     from src._tensor import _Tensor
-from src.utils import _printed
+from src.utils import printed_grad
 
 
-def arg_printer(indent, arg):
-    from src._tensor import _Tensor
-    if isinstance(arg, _Tensor):
-        print(" "*(indent*5), arg.shape)
-
-
-printed_grad = _printed(type="back", arg_print=arg_printer)
 # __all__ = [
 # ]
 
@@ -87,10 +80,11 @@ class AccumulateGrad(GradFn):
 
     @printed_grad
     def _calculate(self, gradient, print_indent=-1):
-        from src._tensor import tensor, _Tensor
+        from src._tensor import _Tensor
+        from src import tensor
         if not isinstance(gradient, _Tensor):
             # TODO: had to
-            gradient = tensor(gradient, requires_grad=False)
+            gradient = tensor.from_numpy(gradient, requires_grad=False)
 
         self.x._accumulate_grad(gradient)
         if print_indent >= 0:
@@ -124,7 +118,7 @@ def correct_shape(v, gradient):
         grad = gradient
         if len(summ):
             grad = gradient.sum(axis=tuple(summ))
-            grad = grad.reshape(v.shape)
+            grad = grad.reshape(shape=v.shape)
     else:
         import numpy as np
         o = np.broadcast(v.data, gradient)
@@ -293,9 +287,9 @@ class MeanGradFn(UnaryOpGradFn):
         if (self.axis is not None) and (gradient.shape != () and gradient.shape != k.shape):
             gradient_shape = list(k.shape)
             gradient_shape[self.axis] = 1
-            gradient = gradient.reshape(*gradient_shape)
-        from src._tensor import tensor_ns_like
-        _pass_gradient(self.next_functions[0], tensor_ns_like(
+            gradient = gradient.reshape(shape=gradient_shape)
+        from src import tensor
+        _pass_gradient(self.next_functions[0], tensor.ns_like(
             k, 1/k.size), gradient, print_indent=print_indent)
 
 
@@ -309,15 +303,42 @@ class SumGradFn(UnaryOpGradFn):
 
     @printed_grad
     def _calculate(self, gradient, print_indent=-1):
-        from src._tensor import tensor_ones
+        from src import tensor
         k, v = self.next_functions[0]
         if (self.axis is not None) and (gradient.shape != () and gradient.shape != k.shape):
             gradient_shape = list(k.shape)
             gradient_shape[self.axis] = 1
-            gradient = gradient.reshape(*gradient_shape)
+            gradient = gradient.reshape(shape=gradient_shape)
         super()._calculate(gradient)
-        _pass_gradient(self.next_functions[0], tensor_ones(k.shape),
+        _pass_gradient(self.next_functions[0], tensor.ones(k.shape),
                        gradient, print_indent=print_indent)
+
+
+class SelectGradFn(GradFn):
+    def __init__(self, vars, result=None) -> None:
+        super().__init__(vars, result)
+
+    @printed_grad
+    def _calculate(self, gradient, print_indent=-1):
+        super()._calculate(gradient)
+        args, _ = self.next_functions[1]
+        k, v = self.next_functions[0]
+        from src import tensor
+        aa = tensor.ones_like(k)*0
+        aa.data[args] = gradient.data
+        _pass_gradient(self.next_functions[0],
+                       1, aa, print_indent=print_indent)
+
+
+class CopySliceGradFn(GradFn):
+    def __init__(self, vars, result=None) -> None:
+        super().__init__(vars, result)
+
+    @printed_grad
+    def _calculate(self, gradient, print_indent=-1):
+        super()._calculate(gradient)
+        args, _ = self.next_functions[1]
+        print(f"{args=}")
 
 
 class CrossEntropyGradFn(BinaryOpGradFn):
@@ -362,7 +383,7 @@ class ReshapeGradFn(UnaryOpGradFn):
     def _calculate(self, gradient, print_indent=-1):
         super()._calculate(gradient)
         k, v = self.next_functions[0]
-        gradient = gradient.reshape(k.shape)
+        gradient = gradient.reshape(shape=k.shape)
         _pass_gradient(self.next_functions[0],
                        1, gradient, print_indent=print_indent)
 
@@ -380,9 +401,9 @@ class NLLGradFn(BinaryOpGradFn):
         super()._calculate(gradient)
         # TODO
         [x, v1], [t, v2] = self.next_functions
-        from src._tensor import tensor_zeros
+        from src import tensor
         len_ = len(t)
-        y = tensor_zeros((x.shape))
+        y = tensor.zeros((x.shape))
         y.data[list(range(len_)), t.numpy().astype(int)] = -(1/len_)
         _pass_gradient(self.next_functions[0],
                        y, gradient, print_indent=print_indent)

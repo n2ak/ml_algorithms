@@ -1,16 +1,11 @@
 from __future__ import annotations
 from functools import partial
 from typing import TYPE_CHECKING
-from src._base import Function
-from src.utils import _printed, as_layer
+from src.utils import printed_act, as_activation_layer
 from src.grad import register_grad_fn, ReLUGradFn
-printed_act = _printed(type="act")
 
 if TYPE_CHECKING:
     from src._tensor import _Tensor
-
-
-as_activation_layer = partial(as_layer, module_name=__name__, base=(Function,))
 
 
 @printed_act
@@ -47,4 +42,12 @@ def log_softmax(x: _Tensor, dim=-1) -> _Tensor:
     # https://stackoverflow.com/questions/61567597/how-is-log-softmax-implemented-to-compute-its-value-and-gradient-with-better
     new_x = x-x.data.max(axis=dim, keepdims=True)
     res = new_x - new_x.exp().sum(axis=dim, keepdim=True).log()
+    return res
+
+
+@printed_act
+@as_activation_layer(name="Tanh")
+def tanh(x):
+    a, b = x.exp(), (-x).exp()
+    res = (a-b)/(a+b)
     return res
