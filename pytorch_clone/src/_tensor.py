@@ -20,8 +20,6 @@ class _Tensor:
 
     def requires_grad_(self, requires_grad=True):
         if requires_grad and self.requires_grad != requires_grad:
-            print("Setting")
-
             def accumulate_backward(grad):
                 self._accumulate_grad(grad)
             accumulate_backward._fn_name = "AccumulateBackward"
@@ -113,8 +111,6 @@ class _Tensor:
     def to_numpy(self, *args):
         return self.data.copy()
 
-    __array__ = to_numpy
-
     def is_a_leaf(self): return self._is_leaf
 
     def can_calculatebackward(self):
@@ -122,14 +118,12 @@ class _Tensor:
             return False
         return True
 
-    def backward(self, gradient=1, print_ok=False):
+    def backward(self, gradient=1):
         if not isinstance(gradient, _Tensor):
             gradient = tensor.from_numpy(gradient)
-        print("calling", self._backward._fn_name, gradient.shape, self.shape)
         assert self.can_calculatebackward()
         # TODO
         # assert np.isfinite(self.data), f"Value is infinite: {self.data}"
-        # print("calling", gradient.shape, self.shape, self._backward._fn_name)
         if self._backward._fn_name != "AccumulateBackward":
             self._accumulate_grad(gradient)
         self._backward(gradient)
@@ -147,16 +141,18 @@ class _Tensor:
     __rtruediv__ = ops.rtruediv
     __matmul__ = ops.matmul
     __neg__ = ops.neg
-    mean = ops.mean
-    sum = ops.sum
-    log = ops.log
-    exp = ops.exp
+
     __rmul__ = __mul__
     __radd__ = __add__
     __rsub__ = __sub__
     __iadd__ = __add__
     __isub__ = __sub__
     __imul__ = __mul__
+
+    mean = ops.mean
+    sum = ops.sum
+    log = ops.log
+    exp = ops.exp
 
     # ------------activations--------------
     tanh = nn.activation.tanh
@@ -191,13 +187,6 @@ class _Tensor:
         import torch
         return torch.from_numpy(self.numpy()).requires_grad_(self.requires_grad)
 
-    @classmethod
-    def rand(cls, *args): return tensor.from_numpy(np.random.rand(*args))
-
-    @classmethod
-    def uniform(cls, shape, low=0, high=1): return tensor.from_numpy(
-        np.random.uniform(low, high, shape))
-
     def __repr__(self) -> str:
         v = (
             # f".val          = {self.numpy()}",
@@ -214,11 +203,19 @@ class _Tensor:
     #     copy = self.copy()
     #     func = getattr(np, f)
     #     copy.data = func()
+    @classmethod
+    def rand(cls, *args): return tensor.from_numpy(np.random.rand(*args))
+
+    @classmethod
+    def uniform(cls, shape, low=0, high=1): return tensor.from_numpy(
+        np.random.uniform(low, high, shape))
 
     def argmax(self, *args):
         return tensor.from_numpy(self.data.argmax(*args)).requires_grad_()
+
     __getitem__ = ops.select
-    # __setitem__ = ops.copy_slice
+    __setitem__ = ops.copy_slice
+    __array__ = to_numpy
 
 
 class tensor:

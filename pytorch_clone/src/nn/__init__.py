@@ -32,8 +32,8 @@ class Module(_HasForwardAndIsCallable):
 
     @property
     def is_training(self): return self._training
-    def train(self): self._training = True
-    def infer(self): self._training = False
+    def training_mode(self): self._training = True
+    def evaluation_mode(self): self._training = False
 
     def zero_grad(self):
         params = self.get_parameters()

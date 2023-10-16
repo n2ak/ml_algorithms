@@ -8,8 +8,8 @@ if TYPE_CHECKING:
     from src._tensor import _Tensor
 
 
-@printed_act
 @as_activation_layer(name="ReLU")
+@printed_act
 @register_grad()
 def relu(x: _Tensor) -> _Tensor:
     def backward(gradient):
@@ -22,13 +22,14 @@ def relu(x: _Tensor) -> _Tensor:
     return xx, backward
 
 
+@as_activation_layer(name="Sigmoid")
 @printed_act
 def sigmoid(tensor: _Tensor) -> _Tensor:
     return 1 / ((-tensor).exp() + 1)
 
 
-@printed_act
 @as_activation_layer(name="Softmax")
+@printed_act
 def softmax(x: _Tensor, dim: int = -1) -> _Tensor:
     m = x - x.data.max(axis=dim, keepdims=True)
     e = m.exp()
@@ -40,8 +41,8 @@ def softmax(x: _Tensor, dim: int = -1) -> _Tensor:
     return x
 
 
-@printed_act
 @as_activation_layer(name="LogSoftmax")
+@printed_act
 def log_softmax(x: _Tensor, dim=-1) -> _Tensor:
     # https://stackoverflow.com/questions/61567597/how-is-log-softmax-implemented-to-compute-its-value-and-gradient-with-better
     new_x = x-x.data.max(axis=dim, keepdims=True)
@@ -49,8 +50,8 @@ def log_softmax(x: _Tensor, dim=-1) -> _Tensor:
     return res
 
 
-@printed_act
 @as_activation_layer(name="Tanh")
+@printed_act
 def tanh(x):
     a, b = x.exp(), (-x).exp()
     res = (a-b)/(a+b)

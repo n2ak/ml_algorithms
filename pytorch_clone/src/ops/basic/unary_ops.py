@@ -25,6 +25,7 @@ def mean(x: _Tensor, axis=None) -> _Tensor:
     return _unary_op(np.mean, x, axis=axis), backward
 
 
+@printed_ops
 @register_grad()
 def sum(x: _Tensor, axis=None, keepdim=False) -> _Tensor:
     from src import tensor

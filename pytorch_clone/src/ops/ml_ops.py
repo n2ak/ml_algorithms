@@ -20,6 +20,7 @@ def flatten(x: _Tensor, start_dim=0, end_dim=-1):
     return x.reshape(new_shape)
 
 
+@printed_ml_ops
 @register_grad()
 def reshape(x, shape):
     def backward(gradient):
@@ -76,26 +77,30 @@ def _conv2d_output_shape(x: _Tensor, out_, ks, p=0, s=1, d=0):
 
 
 @printed_ml_ops
+@register_grad(True)
 def conv2d(
     x: _Tensor,
     weight: _Tensor,
 ):
+    def backward(gradient):
+        raise NotImplementedError()
+
     kernel_size = weight.shape[-2:]
     use_torch = True
     input_unf = unfold(x.numpy(), kernel_size,
                        use_torch=use_torch).requires_grad_(x.requires_grad)
     weight = weight.reshape(shape=(weight.shape[0], -1)).T
     res = (input_unf@weight)
-    print(res.shape)
     res.data = res.data.transpose(0, 2, 1)
     # TODO into a function
     s = int(np.sqrt(res.shape[-1]))
     conputed_output_shpae = (s, s)
     res = fold(res.numpy(), conputed_output_shpae,
                (1, 1), use_torch=use_torch).requires_grad_(res.requires_grad)
-    return res
+    return res, backward
 
 
+@printed_ml_ops
 def unfold(input, kernel_size, pad=0, stride=1, use_torch=True):
     if not use_torch:
         import numpy as np
@@ -128,6 +133,7 @@ def unfold(input, kernel_size, pad=0, stride=1, use_torch=True):
     return x
 
 
+@printed_ml_ops
 def fold(col, shape, kernel_size, pad=0, stride=1, use_torch=True):
     if not use_torch:
         filter_h, filter_w = kernel_size
@@ -160,6 +166,8 @@ def fold(col, shape, kernel_size, pad=0, stride=1, use_torch=True):
     return x
 
 
+@printed_ml_ops
+@register_grad()
 @as_layer(name="Dropout", include_training=True)
 def dropout(x, rate, training=True):
     if training is False:
@@ -168,6 +176,7 @@ def dropout(x, rate, training=True):
     return x
 
 
+@printed_ml_ops
 def unsqueeze(x, dim):
     new_shape = list(x.shape)
     for d in _to_iter(dim):
@@ -182,6 +191,7 @@ def _to_iter(shape):
     return [shape]
 
 
+@printed_ml_ops
 def squeeze(x, dim=None):
     if dim is None:
         new_shape = tuple(filter(lambda d: d != 1, x.shape))
@@ -194,6 +204,7 @@ def squeeze(x, dim=None):
     return x.reshape(shape=new_shape)
 
 
+@printed_ml_ops
 @register_grad()
 def select(x, args):
     def backward(gradient):
@@ -206,10 +217,14 @@ def select(x, args):
     return xx, backward
 
 
-@register_grad()
-def copy_slice(x, slices=None, y=None):
+@printed_ml_ops
+def copy_slice(x, slice, y):
+    from src.grad import grad_off
+
     def backward(gradient):
         raise NotImplementedError()
-    x = x.copy()
-    x.data[slices] = y.copy().data
-    return x, backward
+    with grad_off():
+        x = x.copy()
+        x.data[slice] = y.copy().data
+        backward._fn_name = "CopySliceBackward"
+    x._backward = backward

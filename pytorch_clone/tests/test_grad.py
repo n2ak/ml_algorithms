@@ -215,49 +215,61 @@ def test_select():
     assert_close(o, t)
 
 
-# def test_copy_slice():
-#     from src import nn, tensor
-#     import torch
-#     o1 = tensor.from_numpy(np.random.randint(
-#         0, 10, (10, 20, 30, 10))).requires_grad_()
-#     o2 = tensor.from_numpy(np.random.randint(
-#         0, 10, (4, 30, 8))).requires_grad_()
-#     o3 = tensor.from_numpy(np.random.randint(
-#         0, 10, (10, 30, 4))).requires_grad_()
-#     t1 = o1.torch().requires_grad_(False)
-#     t2 = o2.torch()
-#     t3 = o3.torch()
+def test_copy_slice():
+    from src import nn, tensor
+    import torch
+    o1 = tensor.from_numpy(np.random.randint(
+        0, 10, (10, 20, 30, 10))).requires_grad_()
+    o2 = tensor.from_numpy(np.random.randint(
+        0, 10, (4, 30, 8))).requires_grad_()
+    o3 = tensor.from_numpy(np.random.randint(
+        0, 10, (10, 30, 4))).requires_grad_()
 
-#     print("----")
-#     print(o1.grad_fn)
-#     o1[1, 10:14, :, 2:] = o2
-#     print(o1.grad_fn)
-#     o1[1, 10:, :, 4:8] = o3
-#     print(o1.grad_fn)
-#     o1.sum().backward()
+    t1 = o1.torch().requires_grad_(False)
+    t2 = o2.torch()
+    t3 = o3.torch()
 
-#     print("----")
-#     print(t1.grad_fn)
-#     t1[1, 10:14, :, 2:] = t2
-#     print(t1.grad_fn)
-#     t1[1, 10:, :, 4:8] = t3
-#     print(t1.grad_fn)
-#     t1.sum().backward()
+    print("----")
+    print(o1._backward._fn_name)
+    o1[1, 10:14, :, 2:] = o2
+    print(o1._backward._fn_name)
+    o1[1, 10:, :, 4:8] = o3
+    print(o1._backward._fn_name)
+    o1.sum().backward()
 
-#     assert False
+    print("----")
+    print(t1.grad_fn)
+    t1[1, 10:14, :, 2:] = t2
+    print(t1.grad_fn)
+    t1[1, 10:, :, 4:8] = t3
+    print(t1.grad_fn)
+    t1.sum().backward()
+
+    # assert_close(o1, t1)
+    assert False
 
 
 def test_lstm():
     import torch
     import numpy as np
     from src import nn, tensor
-    input_size, hidden_size = 100, 30
+    input_size, hidden_size = 10, 3
     torch_lstm = torch.nn.LSTM(
         input_size, hidden_size, batch_first=True, bias=False)
     our_lstm = nn.LSTM(input_size, hidden_size)
+    for _ in torch_lstm.all_weights:
+        for index, __ in enumerate(_):
+            for i, gate in enumerate([
+                our_lstm.input_gate,
+                our_lstm.forget_gate,
+                our_lstm.cell_gate,
+                our_lstm.output_gate,
+            ]):
+                gate.weights[index] = tensor.from_numpy(
+                    __[i*hidden_size:(i+1)*hidden_size, :].T.detach().numpy()).requires_grad_()
 
-    X = tensor.from_numpy(np.random.randint(0, 10, (10, 20, 100)))
-    Y = tensor.from_numpy(np.random.randint(0, 10, (10,)))
+    X = tensor.from_numpy(np.random.randint(0, 10, (2, 10, input_size)))
+    Y = tensor.from_numpy(np.random.randint(0, 10, (2,)))
 
     toutput, (thn, tcn) = torch_lstm(X.torch())
     ooutput, (ohn, ocn) = our_lstm(X)
@@ -265,3 +277,5 @@ def test_lstm():
     assert_shape(ooutput, toutput)
     assert_shape(ohn, thn)
     assert_shape(ocn, tcn)
+
+    assert_close(ooutput, toutput)

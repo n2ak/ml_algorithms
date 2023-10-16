@@ -6,13 +6,12 @@ from src.grad.utils import register_grad, _pass_gradient
 from src.utils import as_loss_layer, printed_loss
 
 
-@printed_loss
 @as_loss_layer("CrossEntropyLoss")
+@printed_loss
 @register_grad()
 def cross_entropy(x: _Tensor, t, dim=-1, reduction="mean") -> _Tensor:
     # if from_logits:
     #     TODO : from_logits is True
-    #     t = t.flatten().astype(np.int32)
     def backward(gradient):
         n, *_ = x.shape
         dx = x.softmax(dim=1)
@@ -24,8 +23,8 @@ def cross_entropy(x: _Tensor, t, dim=-1, reduction="mean") -> _Tensor:
     return xx, backward
 
 
-@printed_loss
 @as_loss_layer("NLLLoss")
+@printed_loss
 @register_grad()
 def negative_log_likelihood(x: _Tensor, tt, reduction="mean") -> _Tensor:
     def backward(gradient):
@@ -46,9 +45,15 @@ def negative_log_likelihood(x: _Tensor, tt, reduction="mean") -> _Tensor:
     return res, backward
 
 
-@printed_loss
 @as_loss_layer("MSELoss")
+@printed_loss
+@register_grad()
 def mse(x: _Tensor, t) -> _Tensor:
     batch_size = x.shape[0]
+    raise NotImplementedError()
+
+    def backward(gradient):
+        gradient1 = ((1/2*batch_size) * (x-t)).sum(-1, keepdim=True)
+        _pass_gradient(x, gradient1*gradient)
     res = ((x - t)**2).sum() / batch_size
-    return res
+    return res, backward

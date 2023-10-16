@@ -21,6 +21,7 @@ def cast_vars(vars, tdtype=torch.float, requires_grad=True):
 
 
 def assert_close(var1, var2: torch.Tensor, atol=1e-6):
+    print(np.abs(var1-var2.detach().numpy()).max())
     assert np.allclose(var1, var2.detach(),
                        atol=atol), f"Expected: \n{var2},\nFound: \n{var1}"
     # print(var1.grad.data.sum(), var2.grad.sum())

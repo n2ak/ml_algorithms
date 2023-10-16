@@ -11,6 +11,11 @@ def _load_dataset(loader, swap_channel=False):
     return x, y
 
 
+def load_diabetes():
+    from sklearn.datasets import load_diabetes
+    return _load_dataset(lambda: load_diabetes(return_X_y=True))
+
+
 def load_mnist():
     from sklearn.datasets import load_digits
     return _load_dataset(lambda: load_digits(return_X_y=True))

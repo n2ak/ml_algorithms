@@ -1,6 +1,7 @@
 import tqdm
 import torch
 import numpy as np
+from src.log import LOGGER
 
 np.random.seed(0)
 torch.manual_seed(0)
@@ -17,7 +18,9 @@ def train_tick(model, optim, loss_fn, X, Y):
         pass
     except:
         pass
+    LOGGER.debug("backward begins")
     loss.backward()
+    LOGGER.debug("backward ends")
     optim.step()
     return x.argmax(-1), loss
 

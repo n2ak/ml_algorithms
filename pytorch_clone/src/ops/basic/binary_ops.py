@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 from src.grad import correct_shape
 import numpy as np
 from src.utils import printed_ops
-
+from src.log import LOGGER
 from src.grad.utils import register_grad, _pass_gradient
 if TYPE_CHECKING:
     from src._tensor import _Tensor
@@ -13,16 +13,16 @@ def _bin_op(func, x, other):
     from src import tensor
     res = tensor.from_numpy(func(np.array(x), np.array(other)))
     if np.isfinite(res).mean() != 1:
-        print(
-            "Infinite value, func:",
-            func.__name__,
-            x,
-            other,
+        LOGGER.fatal(
+            "Infinite value, func:", func.__name__,
+            "\nx: ", x.mean(),
+            "\nother: ", other.mean(),
         )
         assert False
     return res
 
 
+@printed_ops
 @register_grad(binary=True)
 def add(x: _Tensor, other) -> _Tensor:
     def backward(gradient):

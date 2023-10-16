@@ -84,11 +84,7 @@ class Conv2D(Layer):
         output_shape = (b, self.out, d1, d2)
         output = tensor.zeros(output_shape).requires_grad_()
         x.conv2d(
-            kernels=self.weights,
-            bias=self.bias,
-            output=output,
-            padding=self.padding,
-            stride=self.stride
+            self.weights,
         )
         return output
 
@@ -140,7 +136,7 @@ class LSTM_GATE(Layer):
         self.init_weights(input_size, hidden_size, bias=bias)
 
     def forward(self, x, h) -> _Tensor:
-        x = (x @ self.weights[0] + h @ self.weights[1])
+        x = ((x @ self.weights[0]) + (h @ self.weights[1]))
         if self.bias is not None:
             x = self.bias[0] + self.bias[1]
         return x
@@ -195,3 +191,18 @@ class LSTM(Layer):
             ht = ot * ct.tanh()
             os.data[:, i, :] = ot
         return os, (ht.unsqueeze(0), ct.unsqueeze(0))
+
+
+class Embedding(Layer):
+    def __init__(self, num_embedding, embedding_dim) -> None:
+        self.init_weights(num_embedding, embedding_dim)
+
+    def forward(self, x) -> _Tensor:
+        return self.weights[x]
+
+    def init_weights(self, n, d):
+        import numpy as np
+        from src import tensor
+        self.weights = tensor.from_numpy(
+            np.random.normal(0, 1, (n, d))).requires_grad_()
+        self.bias = None

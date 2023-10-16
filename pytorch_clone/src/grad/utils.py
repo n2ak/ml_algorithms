@@ -59,24 +59,33 @@ def correct_shape(v, gradient):
     return grad
 
 
+def _set_backward_fn(res, backward, func):
+    from src.utils import printed_grad
+    if not hasattr(func, "backward"):
+        backward._fn_name = f"{func.__name__.capitalize().replace('_','')}Backward"
+        func.backward = printed_grad(backward)
+    res._backward = func.backward
+
+
 def register_grad(binary=False):
     def register(func):
         import functools
 
         @functools.wraps(func)
         def dec(*args, **kwargs):
-            if _can_register_grad() is False:
-                return func(*args, **kwargs)[0]
-            requires_grad = args[0].requires_grad
-            if binary:
-                requires_grad = _tensor_and_requires_grad(
-                    args[0]) or _tensor_and_requires_grad(args[1])
-            with grad_off():
-                res, backward = func(*args, **kwargs)
-            if requires_grad:
-                res.requires_grad = True
-                backward._fn_name = f"{func.__name__.capitalize().replace('_','')}Backward"
-                res._backward = backward
+            if not _can_register_grad():
+                res, _ = func(*args, **kwargs)
+            else:
+                requires_grad = args[0].requires_grad
+                if binary:
+                    requires_grad = _tensor_and_requires_grad(
+                        args[0]) or _tensor_and_requires_grad(args[1])
+                with grad_off():
+                    res, backward = func(*args, **kwargs)
+                if requires_grad:
+                    res.requires_grad = True
+                    _set_backward_fn(res, backward, func)
+
             return res
         return dec
     return register

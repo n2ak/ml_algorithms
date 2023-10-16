@@ -1,0 +1,6 @@
+# **/dummy.*
+**/*.ipynb
+**/.pytest_cache
+**/__pycache__
+**/.mypy*
+datasets
