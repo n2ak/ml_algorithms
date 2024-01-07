@@ -3,3 +3,5 @@
 **/.mypy*
 datasets
 output
+models
+.mypy_cache
