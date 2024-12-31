@@ -1,137 +1,12 @@
-from __future__ import annotations
 import numpy as np
+from .ops import ops
 
 
-class _Tensor:
-    from src import nn
-    import src.ops as ops
-
-    _is_leaf = True
-    _grad = None
-    grad_fn:  None = None
-    requires_grad = False
-
-    def __init__(self, data: np.ndarray) -> None:
-        super().__init__()
-        self._init()
-        self.data = data
-        self.name = ""
-        self._backward = None
-
-    def requires_grad_(self, requires_grad=True):
-        if requires_grad and self.requires_grad != requires_grad:
-            def accumulate_backward(grad):
-                self._accumulate_grad(grad)
-            accumulate_backward._fn_name = "AccumulateBackward"
-            self._backward = accumulate_backward
-        self.requires_grad = requires_grad
-        return self
-
-    def set_grad_fn(self, grad_fn):
-        assert self.grad_fn is None, f"{self.grad_fn.__class__.__name__} --> {grad_fn.__class__.__name__}"
-        self.grad_fn = grad_fn
-
+class Tensor:
     @property
-    def grad(self) -> _Tensor: return self._grad
+    def T(self): return Tensor(self.data.T)
     @property
-    def shape(self) -> _Tensor: return self.data.shape
-    @property
-    def size(self) -> _Tensor: return self.data.size
-    @property
-    def dtype(self) -> _Tensor: return self.data.dtype
-
-    @property
-    def T(self) -> _Tensor:
-        # TODO: make it use np.transpose()
-        copy = self.copy()
-        copy.data = copy.data.T
-        return copy
-
-    def copy(self):
-        # TODO: might be wrong
-        copy = tensor.from_numpy(
-            self.data.copy()).requires_grad_(self.requires_grad)
-        return copy
-
-    def _accumulate_grad(self, gradient):
-        assert self.requires_grad
-        grad = self.grad
-        if grad is None:
-            grad = tensor.from_numpy(0)
-        grad = grad + gradient
-        self.set_grad(grad)
-
-    def set_grad(self, grad):
-        assert isinstance(grad, _Tensor)
-        self_shape, grad_shape = tuple(self.shape), tuple(grad.shape)
-        assert self_shape == grad_shape, f"Expected gradient of shape: {self_shape},recieved: {grad_shape}"
-        self._grad = grad
-
-    def zero_grad(self):
-        # self._grad *=0
-        if self._grad is not None:
-            self.set_grad(tensor.zeros_like(self._grad))
-
-    def _init(self):
-        self._is_leaf = True
-        self._grad = None
-        self.grad_fn = None
-
-    def float(self):
-        self.data = self.data.astype(float)
-        return self
-
-    def astype(self, type):
-        self.data = self.data.astype(type)
-        return self
-
-    @classmethod
-    def array(cls, arr: _Tensor | np.ndarray | list, dtype=np.float32) -> _Tensor:
-        arr = np.array(arr, dtype=dtype)
-        arr = cls(arr)
-        arr._init()
-        return arr
-
-    @staticmethod
-    def ns_like(x, n): return tensor.ns(x.shape, n)
-    @staticmethod
-    def zeros_like(x): return tensor.ns_like(x, 0)
-    @staticmethod
-    def ones_like(x): return tensor.ns_like(x, 1)
-    @staticmethod
-    def ns(shape, k): return tensor.from_numpy(np.zeros(shape)+k)
-    @staticmethod
-    def ones(shape): return tensor.ns(shape, 1)
-    @staticmethod
-    def zeros(shape): return tensor.ns(shape, 0)
-
-    # def numpy(self): return np.add(self.data, 0)
-    def numpy(self): return self.data
-
-    def to_numpy(self, *args):
-        return self.data.copy()
-
-    def is_a_leaf(self): return self._is_leaf
-
-    def can_calculatebackward(self):
-        if self._backward is None:
-            return False
-        return True
-
-    def backward(self, gradient=1):
-        if not isinstance(gradient, _Tensor):
-            gradient = tensor.from_numpy(gradient)
-        assert self.can_calculatebackward()
-        # TODO
-        # assert np.isfinite(self.data), f"Value is infinite: {self.data}"
-        if self._backward._fn_name != "AccumulateBackward":
-            self._accumulate_grad(gradient)
-        self._backward(gradient)
-
-    def is_scalar(self):
-        # return np.isscalar(self)
-        return self.shape == ()
-
+    def size(self): return self.data.size
     __add__ = ops.add
     __sub__ = ops.sub
     __mul__ = ops.mul
@@ -155,17 +30,12 @@ class _Tensor:
     exp = ops.exp
 
     # ------------activations--------------
-    tanh = nn.activation.tanh
-    relu = nn.activation.relu
-    sigmoid = nn.activation.sigmoid
-    softmax = nn.activation.softmax
-    log_softmax = nn.activation.log_softmax
+    tanh = ops.tanh
+    relu = ops.relu
+    sigmoid = ops.sigmoid
+    softmax = ops.softmax
+    log_softmax = ops.log_softmax
     # ------------loss--------------
-    mse = nn.loss.mse
-    cross_entropy = nn.loss.cross_entropy
-    nll = nn.loss.negative_log_likelihood
-    # ------------ops--------------
-    biased = ops.biased
     linear = ops.linear
     conv2d = ops.conv2d
     dropout = ops.dropout
@@ -173,57 +43,55 @@ class _Tensor:
     reshape = ops.reshape
     squeeze = ops.squeeze
     unsqueeze = ops.unsqueeze
-    sequential = ops.sequential
 
-    def __len__(self):
-        return self.data.__len__()
-    # ------------$--------------
-    unique = lambda self, *args, **kwargs: np.unique(self, *args, **kwargs)
+    def __init__(self, data, requires_grad=False) -> None:
+        if not isinstance(data, np.ndarray):
+            data = np.array(data)
+        self.data = data
+        self.make_require_grad(requires_grad)
 
-    # NOTE: For tests
-    def detach(self): return self
+    def make_require_grad(self, val: bool):
+        if val:
+            self.gradient = None
+            self._backward = self.accumulate_grad
+        self.requires_grad = val
 
-    def torch(self):
-        import torch
-        return torch.from_numpy(self.numpy()).requires_grad_(self.requires_grad)
+    def accumulate_grad(self, grad):
+        assert isinstance(grad, np.ndarray)
+        assert grad.shape == self.shape
+        if self.gradient is None:
+            self.gradient = np.asarray(0).astype(grad.dtype)
+        self.gradient = self.gradient + grad
 
-    def __repr__(self) -> str:
-        v = (
-            # f".val          = {self.numpy()}",
-            f".requires_grad= {self.requires_grad}",
-            f".grad_fn      = {type(self.grad_fn).__name__}"
-        )
-        t = "\n".join(v)
-        return f'<nn.Tensor\n{t}/>'
+    def requires_grad_(self, val=True):
+        self.make_require_grad(val)
+        return self
 
-    def __str__(self) -> str:
-        return str(self.numpy())
+    @property
+    def shape(self): return self.data.shape
 
-    # def __getattr__(self, f):
-    #     copy = self.copy()
-    #     func = getattr(np, f)
-    #     copy.data = func()
-    @classmethod
-    def rand(cls, *args): return tensor.from_numpy(np.random.rand(*args))
+    @staticmethod
+    def normal(shape):
+        return Tensor(np.random.normal(0, 1, shape))
 
-    @classmethod
-    def uniform(cls, shape, low=0, high=1): return tensor.from_numpy(
-        np.random.uniform(low, high, shape))
+    from functools import partialmethod
 
-    def argmax(self, *args):
-        return tensor.from_numpy(self.data.argmax(*args)).requires_grad_()
+    @staticmethod
+    def ns(shape, n):
+        return Tensor(np.zeros(shape) + n)
 
-    __getitem__ = ops.select
-    __setitem__ = ops.copy_slice
-    __array__ = to_numpy
+    @staticmethod
+    def ns_like(x, n):
+        return Tensor.ns(x.shape, n)
 
+    ones = partialmethod(ns_like, n=1)
+    zeros = partialmethod(ns_like, n=0)
 
-class tensor:
-    tensor = _Tensor.array
-    from_numpy = tensor
-    zeros = _Tensor.zeros
-    zeros_like = _Tensor.zeros_like
-    ones = _Tensor.ones
-    ones_like = _Tensor.ones_like
-    ns_like = _Tensor.ns_like
-    ns = _Tensor.ns
+    def copy(self): return Tensor(self.data.copy())
+
+    def backward(self, gradient=1, strict=True):
+        if not isinstance(gradient, np.ndarray):
+            gradient = np.array(gradient)
+        assert self.requires_grad
+        assert gradient.shape == self.shape, (gradient.shape, self.shape)
+        self._backward(gradient)

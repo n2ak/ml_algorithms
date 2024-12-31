@@ -1,7 +1,4 @@
-from __future__ import annotations
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from src._tensor import _Tensor
+from ._tensor import Tensor
 
 
 def kaiming(
@@ -9,7 +6,7 @@ def kaiming(
     fan_mode,
     distribution="uniform",
     fun="relu",
-) -> _Tensor:
+):
     import numpy as np
     gain = get_gain(fun)
     if isinstance(fan_mode, str):
@@ -25,8 +22,7 @@ def kaiming(
     else:
         raise NotImplementedError(f"Unknown distribution: {distribution}")
 
-    from src import tensor
-    return tensor.from_numpy(t)
+    return Tensor(t)
 
 
 def get_gain(fun: str):
