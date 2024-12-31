@@ -5,3 +5,5 @@ datasets
 output
 models
 .mypy_cache
+.vscode
+old
