@@ -7,3 +7,5 @@ models
 .mypy_cache
 .vscode
 old
+*.zip
+*.pt
