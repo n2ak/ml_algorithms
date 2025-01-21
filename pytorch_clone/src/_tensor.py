@@ -2,11 +2,19 @@ import numpy as np
 from .ops import ops
 
 
+def is_tensor(x):
+    return isinstance(x, Tensor)
+
+
 class Tensor:
     @property
     def T(self): return Tensor(self.data.T)
     @property
     def size(self): return self.data.size
+    @property
+    def ndim(self): return self.data.ndim
+    @property
+    def dtype(self): return self.data.dtype
     __add__ = ops.add
     __sub__ = ops.sub
     __mul__ = ops.mul
@@ -51,14 +59,15 @@ class Tensor:
         self.make_require_grad(requires_grad)
 
     def make_require_grad(self, val: bool):
+        self.gradient = None
         if val:
-            self.gradient = None
             self._backward = self.accumulate_grad
         self.requires_grad = val
 
     def accumulate_grad(self, grad):
         assert isinstance(grad, np.ndarray)
-        assert grad.shape == self.shape
+        assert grad.shape == self.shape, \
+            f"Expected gradient shape to match tensor shape,but found {self.shape}=/={grad.shape}"
         if self.gradient is None:
             self.gradient = np.asarray(0).astype(grad.dtype)
         self.gradient = self.gradient + grad
@@ -84,8 +93,14 @@ class Tensor:
     def ns_like(x, n):
         return Tensor.ns(x.shape, n)
 
-    ones = partialmethod(ns_like, n=1)
-    zeros = partialmethod(ns_like, n=0)
+    ones = partialmethod(ns, n=1)
+    zeros = partialmethod(ns, n=0)
+    ones_like = partialmethod(ns_like, n=1)
+    zeros_like = partialmethod(ns_like, n=0)
+
+    def item(self):
+        assert self.size == 1, f"Expected size to be 1 but found: {self.size}"
+        return self.data.tolist()
 
     def copy(self): return Tensor(self.data.copy())
 
@@ -94,4 +109,16 @@ class Tensor:
             gradient = np.array(gradient)
         assert self.requires_grad
         assert gradient.shape == self.shape, (gradient.shape, self.shape)
-        self._backward(gradient)
+        # try:
+        from .grad_utils import grad_off
+        with grad_off():
+
+            self._backward(gradient)
+        # except:
+            # print("Error")
+
+    def __repr__(self) -> str:
+        return self.data.__repr__()
+
+    def __getitem__(self, item):
+        return Tensor(self.data[item])

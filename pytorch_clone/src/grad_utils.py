@@ -20,8 +20,6 @@ def _compare(n_grads, a_grads, rtol, atol):
     for i, ng, ag in zip(range(len(n_grads)), n_grads, a_grads):
         assert ng.shape == ag.shape
         if not np.allclose(ng, ag, rtol=rtol, atol=atol):
-            print(ng)
-            print(ag)
             raise ValueError(f"Input at {i}")
 
 
@@ -69,7 +67,7 @@ def _tensor_and_requires_grad(var):
     return isinstance(var, Tensor) and var.requires_grad
 
 
-def _pass_gradient(var, gradient):
+def pass_gradient(var, gradient):
     import numpy as np
     assert isinstance(gradient, np.ndarray)
     if _tensor_and_requires_grad(var):
@@ -82,8 +80,12 @@ def _set_backward_fn(res, backward, func):
     res._backward = backward
 
 
-def differentiable_function(n_grad_args=1):
-    assert isinstance(n_grad_args, int)
+def differentiable_function(n_grad_args=None):
+    """
+    decorator for a differentiable function that returns a result and a backward
+    function
+    """
+    # assert isinstance(n_grad_args, int)
 
     def register(func):
         import functools
@@ -94,9 +96,9 @@ def differentiable_function(n_grad_args=1):
                 return func(*args, **kwargs)[0]
             with grad_off():
                 res, backward = func(*args, **kwargs)
-            res.requires_grad = any(
-                map(_requires_grad, args[:n_grad_args]))
-            # print(res)
+            args_grad = list(map(_requires_grad, args[:n_grad_args]))
+            res.requires_grad = any(args_grad)
+            # print(res.requires_grad, args_grad, backward)
             if res.requires_grad:
                 _set_backward_fn(res, backward, func)
             return res
