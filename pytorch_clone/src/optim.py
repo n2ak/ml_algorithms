@@ -1,16 +1,28 @@
 import dataclasses
 import numpy as np
 from ._tensor import Tensor
+import typing
 
 
 class BaseOptim:
-    def __init__(self, params: list[Tensor]) -> None:
+    _initialized = False
+
+    def __init__(self, params: typing.Generator[Tensor, None, None]) -> None:
         self.params = params
 
+    def initialize(self):
+        if not self._initialized:
+            self.params = list(self.params)
+            assert len(self.params) > 0
+            self.init()
+            self._initialized = True
+
     def step(self):
-        raise NotImplementedError("")
+        self.initialize()
+        self._step()
 
     def zero_grad(self):
+        self.initialize()
         for p in self.params:
             p.gradient = None
 
@@ -26,13 +38,14 @@ class SGD(BaseOptim):
         self.nesterov = nesterov
         self.t = 0
 
+    def init(self):
         @dataclasses.dataclass
         class State:
             b: np.ndarray
-        self.state: list[State] = [] if momentum == 0 else [
+        self.state: list[State] = [] if self.momentum == 0 else [
             State(0) for _ in range(len(self.params))]
 
-    def step(self):
+    def _step(self):
         lr = self.lr
         momentum = self.momentum
         weight_decay = self.weight_decay
@@ -69,6 +82,7 @@ class Adam(BaseOptim):
         self.betas = betas
         self.t = 0
 
+    def init(self):
         @dataclasses.dataclass
         class State:
             m: float  # | np.ndarray
@@ -77,7 +91,7 @@ class Adam(BaseOptim):
         self.state: list[State] = [State(0, 0, 0)
                                    for _ in range(len(self.params))]
 
-    def step(self):
+    def _step(self):
         lr = self.lr
         t = self.t
         weight_decay = self.weight_decay
@@ -93,7 +107,6 @@ class Adam(BaseOptim):
             state.v = beta2 * state.v + (1-beta2) * (g**2)
             mhat = state.m/(1/beta1)
             vhat = state.v/(1/beta2)
-            # print(mhat, vhat)
             if amsgrad:
                 state.vhatmax = np.maximum(state.vhatmax, vhat)
                 p.data -= lr * mhat / (np.sqrt(state.vhatmax) + eps)
