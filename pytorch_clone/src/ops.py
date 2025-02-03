@@ -1,5 +1,6 @@
 
 from __future__ import annotations
+import numba
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ._tensor import Tensor
@@ -96,57 +97,31 @@ def tanh(x):
 
 
 @differentiable_function(3)
-def conv2d(
+def conv2d_slow(
     input,
     weight,
     bias,
-    out_channels,
     padding=(0, 0),
     stride=(1, 1),
 ):
     # TODO: add strides
     from ._tensor import Tensor
-    N = input.shape[0]
     (N, C, H, W) = input.shape
     pad1, pad2 = padding
-    padded = Tensor.from_numpy(
-        np.pad(input, [(0, 0), (0, 0), (pad1, pad1), (pad2, pad2)], 'constant', constant_values=(0, 0)))
+    padded = input
+    if padding != (0, 0):
+        padded = Tensor(np.pad(input, [
+                        (0, 0), (0, 0), (pad1, pad1), (pad2, pad2)], 'constant', constant_values=(0, 0)))
     stride1, stride2 = stride
     (F, C, KH, KW) = weight.shape
     OH = int(((H+pad1*2)-KH) / stride1 + 1)
     OW = int(((W+pad2*2)-KW) / stride2 + 1)
-    out = Tensor.from_numpy(
-        np.empty((N, out_channels, OH, OW), dtype=np.float32))
+    out = Tensor(np.empty((N, F, OH, OW), dtype=np.float32))
 
-    def backward(gradient):
-        dpadded = np.zeros_like(padded)
-        dweight = np.zeros_like(weight)
-        db = np.zeros_like(bias)
-        for i in range(OH):
-            for j in range(OW):
-                h_index = i*stride1
-                w_index = j*stride2
-                p = padded.data[:, :, h_index:h_index+KH, w_index:w_index+KW]
-                for k in range(F):
-                    db[k] = db[k] + (1 * gradient.data[:, k, i, j]).sum()
-                    dfilter = gradient.data[:, k, i, j]
-                    dres = dfilter.reshape(-1, 1, 1, 1)
-                    dp = weight.data[k] * dres
-                    dweight[k] += (p * dres).sum(0)
-                    # assert dres.shape == p.shape , (dres.shape,p.shape)
-                    assert dp.shape == p.shape, (dp.shape, p.shape)
-                    dpadded[:, :, h_index:h_index+KH, w_index:w_index+KW] += dp
-
-        def end(pad1):
-            if pad1 == 0:
-                return None
-            return -pad1
-        dx = dpadded[..., pad1:end(pad1), pad2:end(pad2)]
-        pass_gradient(input, Tensor.from_numpy(dx))
-        pass_gradient(weight, Tensor.from_numpy(dweight))
-        pass_gradient(bias, Tensor.from_numpy(db))
     # todo: subs padding
-
+    def backward(gradient):
+        conv2d_backward_slow(gradient, padded, weight, bias,
+                             padding, stride, OH, OW, KH, KW, F)
     for i in range(OH):
         for j in range(OW):
             h_index = i*stride1
@@ -155,8 +130,163 @@ def conv2d(
             for ki, kernel in enumerate(weight.data):
                 res = (kernel*k).sum((1, 2, 3)) + bias.data[ki]
                 out.data[..., ki, i, j] = res
-
     return out, backward
+
+
+# @numba.njit()
+def helper(
+    padded: np.ndarray,
+    weight: np.ndarray,
+    gradient: np.ndarray,
+    dpadded: np.ndarray,
+    dweight: np.ndarray,
+    db: np.ndarray,
+    F: int,
+    OH: int,
+    OW: int,
+    stride1: int,
+    stride2: int,
+    KH: int,
+    KW: int,
+):
+    for i in range(OH):
+        for j in range(OW):
+            h_index = i*stride1
+            w_index = j*stride2
+            p = padded[:, :, h_index:h_index+KH, w_index:w_index+KW]
+            for k in range(F):
+                db[k] = db[k] + (1 * gradient[:, k, i, j]).sum()
+                dfilter = gradient[:, k, i, j]
+                dres = np.ascontiguousarray(dfilter).reshape(-1, 1, 1, 1)
+                dp = weight[k] * dres
+                dweight[k] += (p * dres).sum(0)
+                # assert dres.shape == p.shape , (dres.shape,p.shape)
+                assert dp.shape == p.shape, (dp.shape, p.shape)
+                dpadded[:, :, h_index:h_index+KH, w_index:w_index+KW] += dp
+
+
+def conv2d_backward_slow(gradient, padded, weight, bias, pad, stride, OH, OW, KH, KW, F):
+    pad1, pad2 = pad
+
+    def end(pad1):
+        if pad1 == 0:
+            return None
+        return -pad1
+
+    dpadded = np.zeros_like(padded.data)
+    dweight = np.zeros_like(weight.data)
+    db = np.zeros_like(bias.data)
+    helper(padded.data, weight.data, gradient, dpadded,
+           dweight, db, F, OH, OW, stride[0], stride[1], KH, KW)
+
+    dx = dpadded[..., pad1:end(pad1), pad2:end(pad2)]
+    pass_gradient(padded, dx)
+    pass_gradient(weight, dweight)
+    pass_gradient(bias, db)
+
+
+def im2col(A, B, skip):
+    # https://stackoverflow.com/questions/30109068/implement-matlabs-im2col-sliding-in-python
+    # Parameters
+    batch, D, M, N = A.shape
+    col_extent = N - B[1] + 1
+    row_extent = M - B[0] + 1
+
+    # Get batch block indices
+    batch_idx = np.arange(batch)[:, None, None] * D * M * N
+
+    # Get Starting block indices
+    start_idx = np.arange(B[0])[None, :, None]*N + np.arange(B[1])
+
+    # Generate Depth indeces
+    didx = M*N*np.arange(D)
+    start_idx = (didx[None, :, None]+start_idx.ravel()
+                 ).reshape((-1, B[0], B[1]))
+
+    # Get offsetted indices across the height and width of input array
+    offset_idx = np.arange(row_extent)[None, :, None]*N + np.arange(col_extent)
+
+    # Get all actual indices & index into input array for final output
+    act_idx = (batch_idx +
+               start_idx.ravel()[None, :, None] +
+               offset_idx[:, ::skip[0], ::skip[1]].ravel())
+
+    out = np.take(A, act_idx)
+    return out
+
+
+@differentiable_function(3)
+def conv2d(
+    input,
+    weight,
+    bias,
+    padding=(0, 0),
+    stride=(1, 1),
+):
+    # TODO: add strides
+    (N, C, H, W) = input.shape
+    pad1, pad2 = padding
+    padded = input
+    if padding != (0, 0):
+        padded = (np.pad(input, [
+                        (0, 0), (0, 0), (pad1, pad1), (pad2, pad2)], 'constant', constant_values=(0, 0)))
+    stride1, stride2 = stride
+    (F, _, KH, KW) = weight.shape
+    OH = int(((H+pad1*2)-KH) / stride1 + 1)
+    OW = int(((W+pad2*2)-KW) / stride2 + 1)
+    # out = (np.empty((N, F, OH, OW), dtype=np.float32))
+
+    def backward(gradient):
+        conv2d_backward_slow(gradient, padded, weight, bias,
+                             padding, stride, OH, OW, KH, KW, F)
+    col = im2col(padded.data, (KH, KW), skip=stride)
+    out = weight.data.reshape(
+        weight.shape[0], -1) @ col + bias.data[..., None]
+    out = out.reshape(N, F, OH, OW)
+    from ._tensor import Tensor
+    return Tensor(out), backward
+
+
+@differentiable_function(3)
+def conv2d_fast(
+    input,
+    weight,
+    bias,
+    padding=(0, 0),
+    stride=(1, 1),
+):
+    # TODO: add strides
+    pad1, pad2 = padding
+    padded = input
+    if padding != (0, 0):
+        padded = (np.pad(input, [
+                        (0, 0), (0, 0), (pad1, pad1), (pad2, pad2)], 'constant', constant_values=(0, 0)))
+    (_, _, KH, KW) = weight.shape
+    pad1, pad2 = padding
+    (N, _, H, W) = input.shape
+    (F, _, KH, KW) = weight.shape
+    stride1, stride2 = stride
+    OH = int(((H+pad1*2)-KH) / stride1 + 1)
+    OW = int(((W+pad2*2)-KW) / stride2 + 1)
+    # out = (np.empty((N, F, OH, OW), dtype=np.float32))
+
+    def backward(gradient):
+        import torch
+        import torch.nn.grad
+        grad_input = torch.nn.grad.conv2d_input(
+            tuple(input.shape), torch.from_numpy(weight.data), torch.from_numpy(gradient))
+        grad_weight = torch.nn.grad.conv2d_weight(
+            torch.from_numpy(input.data), tuple(weight.shape), torch.from_numpy(gradient))
+
+        pass_gradient(input, grad_input.numpy())
+        pass_gradient(weight, grad_weight.numpy())
+        pass_gradient(bias, np.zeros_like(bias.data))
+        # pass_gradient(bias, db)
+    out = weight.data.reshape(
+        weight.shape[0], -1) @ im2col(padded.data, (KH, KW), skip=stride) + bias.data.reshape(1, -1, 1)
+    out = out.reshape(N, F, OH, OW)
+    from ._tensor import Tensor
+    return Tensor(out), backward
 
 
 @differentiable_function(2)
@@ -164,13 +294,17 @@ def add(x, other):
     res = _bin_op(np.add, x, other)
 
     def backward(gradient):
-        from ._tensor import Tensor
-        for var in [x, other]:
-            new_grad = gradient
-            if isinstance(var, Tensor) and var.shape != new_grad.shape:
-                new_grad = correct_shape(var.data, new_grad)
-            pass_gradient(var, new_grad)
+        add_backward(gradient, x, other)
     return res, backward
+
+
+def add_backward(gradient, x, other):
+    from ._tensor import Tensor
+    for var in [x, other]:
+        new_grad = gradient
+        if isinstance(var, Tensor) and var.shape != new_grad.shape:
+            new_grad = correct_shape(var.data, new_grad)
+        pass_gradient(var, new_grad)
 
 
 @differentiable_function(2)
@@ -324,6 +458,8 @@ class ops:
     log_softmax = log_softmax
     linear = linear
     conv2d = conv2d
+    conv2d_slow = conv2d_slow
+    conv2d_fast = conv2d_fast
     flatten = flatten
     reshape = reshape
     dropout = None  # dropout

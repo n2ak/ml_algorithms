@@ -1,12 +1,12 @@
 
+import typing
 from ._tensor import Tensor
-from typing import Any
 from .initialization import kaiming
 
 
 class Module:
-    def __call__(self, *args: Any, **kwds: Any):
-        return self.forward(*args, **kwds)
+    def __call__(self, *args, **kwargs):
+        return self.forward(*args, **kwargs)
 
     def _params(self):
         raise NotImplementedError(
@@ -53,20 +53,20 @@ class Module:
 
 
 class Sequential(Module):
-    def __init__(self, *layers) -> None:
+    def __init__(self, *layers: Module) -> None:
         self.layers = layers
 
     def forward(self, x):
         for l in self.layers:
-            x = l.forward(x)
+            x = l(x)
         return x
 
     def _params(self):
-        return [l._params() for l in self.layers]
+        return [l._params() for l in self.layers if issubclass(type(l), Module)]
 
 
 class Linear(Module):
-    def __init__(self, inc, outc, bias=False) -> None:
+    def __init__(self, inc, outc, bias=True) -> None:
         self.weight = kaiming((inc, outc), fan_mode=inc).requires_grad_()
 
         self.bias = None
@@ -74,9 +74,46 @@ class Linear(Module):
             self.bias = kaiming((outc,), fan_mode=inc).requires_grad_()
 
     def forward(self, x):
-        assert x.ndim == 2
+        N, C = x.shape
+        assert self.weight.shape[0] == C, f"Channels don't match {self.weight.shape[0]} != {C}"
         res = x.linear(self.weight, self.bias)
         return res
+
+    def _params(self):
+        if self.bias is None:
+            return [self.weight]
+        return [self.weight, self.bias]
+
+
+def _2d_tuple(x, n=2):
+    if isinstance(x, (tuple, list)):
+        return tuple(x)
+    return tuple([x for _ in range(n)])
+
+
+class Conv2D(Module):
+    def __init__(self, inc, outc, kernel, bias=True, conv_impl: typing.Literal["slow", "fast_forward", "fast"] = "slow") -> None:
+        k1, k2 = _2d_tuple(kernel)
+        self.weight = kaiming((outc, inc, k1, k2),
+                              fan_mode=inc).requires_grad_()
+        self.inc = inc
+        impls = ["slow", "fast_forward", "fast"]
+        assert conv_impl in impls, f"{conv_impl} not in {impls}"
+        self.conv_impl = conv_impl
+        self.bias = None
+        if bias:
+            self.bias = kaiming((outc,), fan_mode=inc).requires_grad_()
+
+    def forward(self, x: Tensor):
+        assert (x.ndim == 4), x.shape
+        assert (x.shape[1] == self.inc), (self.inc, x.shape)
+        d = {
+            "slow": x.conv2d_slow,
+            "fast_forward": x.conv2d,
+            "fast": x.conv2d_fast,
+        }
+        func = d[self.conv_impl]
+        return func(self.weight, self.bias)
 
     def _params(self):
         if self.bias is None:

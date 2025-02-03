@@ -46,6 +46,8 @@ class Tensor:
     # ------------loss--------------
     linear = ops.linear
     conv2d = ops.conv2d
+    conv2d_slow = ops.conv2d_slow
+    conv2d_fast = ops.conv2d_fast
     dropout = ops.dropout
     flatten = ops.flatten
     reshape = ops.reshape
@@ -55,6 +57,7 @@ class Tensor:
     def __init__(self, data, requires_grad=False) -> None:
         if not isinstance(data, np.ndarray):
             data = np.array(data)
+        assert not isinstance(data, Tensor)
         self.data = data
         self.make_require_grad(requires_grad)
 
