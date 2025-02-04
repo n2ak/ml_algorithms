@@ -1,3 +1,4 @@
+import functools
 import contextlib
 import numpy as np
 
@@ -74,20 +75,40 @@ def _tensor_and_requires_grad(var):
     return isinstance(var, Tensor) and var.requires_grad
 
 
-def pass_gradient(var, gradient):
+def try_pass_gradient(var, gradient):
     import numpy as np
     assert isinstance(
         gradient, np.ndarray), f"Expcected gradient to be np.ndarray but found {type(gradient)}"
     if _tensor_and_requires_grad(var):
-        # gradient's shape must mach the tensor's
-        # assert var.shape == gradient.shape, f"Expected gradient of shape {gradient.shape} to match the tensor's shape {var.shape}"
         var._backward(gradient)
 
 
-def _set_backward_fn(res, backward, func):
+def wrap_backward(old_backward, inputs):
+    @functools.wraps(old_backward)
+    def new_backward(gradient):
+        n_inputs = len(inputs)
+        new_gradients = old_backward(gradient)
+        if n_inputs == 1:
+            assert isinstance(new_gradients, np.ndarray), old_backward._fn_name
+            new_gradients = (new_gradients,)
+        assert isinstance(
+            new_gradients, tuple), f"Expected output of {old_backward._fn_name} to be tuple of len={n_inputs} but found {type(new_gradients)}"
+        assert len(new_gradients) == len(
+            inputs), f"{old_backward._fn_name} doenst output the same number of" +\
+            f"gradients as its inputs, expected {n_inputs} but found {len(new_gradients)}"
+        for g, inp in zip(new_gradients, inputs):
+            try_pass_gradient(inp, g)
+    return new_backward
+
+
+def capitalize(s: str):
+    return s[0].capitalize() + s[1:]
+
+
+def setup_backward_func(backward, name):
     if not hasattr(backward, "_fn_name"):
-        backward._fn_name = f"{func.__name__.capitalize().replace('_','')}Backward"
-    res._backward = backward
+        setattr(backward, "_fn_name",
+                f"{capitalize(name.replace('_', ''))}Backward")
 
 
 def differentiable_function(n_grad_args=None):
@@ -97,7 +118,6 @@ def differentiable_function(n_grad_args=None):
     """
     # assert isinstance(n_grad_args, int)
     def register(func):
-        import functools
 
         @functools.wraps(func)
         def dec(*args, **kwargs):
@@ -105,12 +125,17 @@ def differentiable_function(n_grad_args=None):
                 return func(*args, **kwargs)[0]
             with grad_off():
                 res, backward = func(*args, **kwargs)
+            setup_backward_func(backward, func.__name__)
+            backward = wrap_backward(backward, args[:n_grad_args])
             args_grad = list(
                 map(_tensor_and_requires_grad, args[:n_grad_args]))
+            from src import Tensor
+            res: Tensor = res
             res.requires_grad = any(args_grad)
             # print(res.requires_grad, args_grad, backward)
             if res.requires_grad:
-                _set_backward_fn(res, backward, func)
+                res._set_backward_fn(backward)
+
             return res
         return dec
     return register

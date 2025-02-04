@@ -1,5 +1,5 @@
 from ._tensor import Tensor, is_tensor
-from .grad_utils import differentiable_function, pass_gradient
+from .grad_utils import differentiable_function
 import numpy as np
 
 
@@ -17,7 +17,7 @@ def cross_entropy(x: Tensor, t, dim=-1, reduction="mean") -> Tensor:
         dx = x.softmax(dim=1).data
         dx[list(range(n)), t.data.astype(int)] -= 1
         dx /= n
-        pass_gradient(x, dx * gradient)
+        return dx * gradient
     xx = x.log_softmax(dim)
     xx = negative_log_likelihood(xx, t, reduction=reduction)
     return xx, backward
@@ -34,12 +34,12 @@ def negative_log_likelihood(x: Tensor, tt: Tensor, reduction="mean"):
         len_ = len(t)
         y = Tensor.zeros((x.shape))
         y.data[list(range(len_)), tt.numpy().astype(int)] = -(1/len_)
-        pass_gradient(x, y.data * gradient)
+        return y.data * gradient
 
     t = tt.data.astype(int)
     y = Tensor.zeros((len(t), x.shape[-1]))
     y.data[list(range(len(t))), t] = 1
-    res = (x*y).sum(axis=1)
+    res = (x*y).sum(dim=1)
     if reduction == "mean":
         res = - res.mean()
     elif reduction == "sum":

@@ -1,12 +1,12 @@
 import numpy as np
-from .ops import bin_ops, unary_ops, other_ops, reduction_ops
+from .ops import _TensorOps
 
 
 def is_tensor(x):
     return isinstance(x, Tensor)
 
 
-class Tensor:
+class Tensor(_TensorOps):
     @property
     def T(self): return Tensor(self.data.T)
     @property
@@ -15,44 +15,6 @@ class Tensor:
     def ndim(self): return self.data.ndim
     @property
     def dtype(self): return self.data.dtype
-    __add__ = bin_ops.add
-    __sub__ = bin_ops.sub
-    __mul__ = bin_ops.mul
-    __pow__ = bin_ops.pow
-    __div__ = bin_ops.truediv
-    __truediv__ = bin_ops.truediv
-    __rtruediv__ = bin_ops.rtruediv
-    __matmul__ = bin_ops.matmul
-    __neg__ = unary_ops.neg
-
-    __rmul__ = __mul__
-    __radd__ = __add__
-    __rsub__ = __sub__
-    __iadd__ = __add__
-    __isub__ = __sub__
-    __imul__ = __mul__
-
-    mean = reduction_ops.mean
-    sum = reduction_ops.sum
-    log = unary_ops.log
-    exp = unary_ops.exp
-
-    # ------------activations--------------
-    tanh = unary_ops.tanh
-    relu = unary_ops.relu
-    sigmoid = unary_ops.sigmoid
-    softmax = unary_ops.softmax
-    log_softmax = unary_ops.log_softmax
-    # ------------other--------------
-    linear = other_ops.linear
-    conv2d = other_ops.conv2d
-    conv2d_slow = other_ops.conv2d_slow
-    conv2d_fast = other_ops.conv2d_fast
-    dropout = other_ops.dropout
-    flatten = other_ops.flatten
-    reshape = other_ops.reshape
-    squeeze = other_ops.squeeze
-    unsqueeze = other_ops.unsqueeze
 
     def __init__(self, data, requires_grad=False) -> None:
         if not isinstance(data, np.ndarray):
@@ -64,16 +26,25 @@ class Tensor:
     def make_require_grad(self, val: bool):
         self.gradient = None
         if val:
-            self._backward = self.accumulate_grad
+            def accumulate_grad(grad):
+                assert isinstance(grad, np.ndarray)
+                assert grad.shape == self.shape, \
+                    f"Expected gradient shape to match tensor shape,but found {self.shape}=/={grad.shape}"
+                if self.gradient is None:
+                    self.gradient = np.asarray(0).astype(grad.dtype)
+                self.gradient = self.gradient + grad
+            from src.grad_utils import setup_backward_func
+            setup_backward_func(accumulate_grad, "AccumulateGrad")
+            self._set_backward_fn(accumulate_grad, )
         self.requires_grad = val
 
-    def accumulate_grad(self, grad):
-        assert isinstance(grad, np.ndarray)
-        assert grad.shape == self.shape, \
-            f"Expected gradient shape to match tensor shape,but found {self.shape}=/={grad.shape}"
-        if self.gradient is None:
-            self.gradient = np.asarray(0).astype(grad.dtype)
-        self.gradient = self.gradient + grad
+    # def accumulate_grad(self, grad):
+    #     assert isinstance(grad, np.ndarray)
+    #     assert grad.shape == self.shape, \
+    #         f"Expected gradient shape to match tensor shape,but found {self.shape}=/={grad.shape}"
+    #     if self.gradient is None:
+    #         self.gradient = np.asarray(0).astype(grad.dtype)
+    #     self.gradient = self.gradient + grad
 
     def requires_grad_(self, val=True):
         self.make_require_grad(val)
@@ -114,21 +85,25 @@ class Tensor:
 
     def copy(self): return Tensor(self.data.copy())
 
-    def backward(self, gradient=1, strict=True):
-        if not isinstance(gradient, np.ndarray):
-            gradient = np.array(gradient)
+    def _backward(self, gradient):
         assert self.requires_grad
-        assert gradient.shape == self.shape, (gradient.shape, self.shape)
-        # try:
+        assert isinstance(gradient, np.ndarray)
+        # print(self.__backward._fn_name, gradient)
+        assert self.shape == gradient.shape, f"Expected gradient of shape {gradient.shape} to match the tensor's shape {self.shape}"
+        self.__backward(gradient)
+
+    def backward(self, gradient=1):
+        if isinstance(gradient, int):
+            gradient = np.array(gradient)
         from .grad_utils import grad_off
         with grad_off():
-
             self._backward(gradient)
-        # except:
-            # print("Error")
 
     def __repr__(self) -> str:
         return self.data.__repr__()
 
     def __getitem__(self, item):
         return Tensor(self.data[item])
+
+    def _set_backward_fn(self, backward):
+        self.__backward = backward

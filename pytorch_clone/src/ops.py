@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ._tensor import Tensor
 import numpy as np
-from .grad_utils import differentiable_function, pass_gradient
+from .grad_utils import differentiable_function
 
 
 def _bin_op(func, x, y):
@@ -31,16 +31,15 @@ def flatten(x: Tensor, start_dim=0, end_dim=-1):
 @differentiable_function()
 def matmul(x: Tensor, other) -> Tensor:
     def backward(gradient: Tensor):
-        pass_gradient(x, gradient @ other.data.T)
-        pass_gradient(other, x.data.T @ gradient)
+        return gradient @ other.data.T, x.data.T @ gradient
     return _bin_op(np.matmul, x, other), backward
 
 
-@differentiable_function()
+@differentiable_function(1)
 def reshape(x, *shape):
     def backward(gradient: Tensor):
         gradient = gradient.reshape(*x.shape)
-        pass_gradient(x, gradient)
+        return gradient
     # No copy
     t = x.copy()
     t.data = t.data.reshape(*shape)
@@ -63,7 +62,7 @@ def relu(tensor):
 
     def backward(gradient):
         gradient[mask] = 0
-        pass_gradient(tensor, gradient)
+        return gradient
     return x, backward
 
 
@@ -73,27 +72,29 @@ def sigmoid(t):
         # dsig(x) = sig(x) * (1 - sig(x))
         local_g = res.data
         local_g = local_g * (1 - local_g)
-        pass_gradient(t, local_g * gradient)
+        return local_g * gradient
     res = 1 / ((-t).exp() + 1)
     return res, backward
 
 
-# @differentiable_function()
+@differentiable_function(1)
 def softmax(x: Tensor, dim: int = -1):
     def backward(gradient):
-        g = res.data * (1 - res.data)
-        pass_gradient(x, g*gradient)
+        a = da = exp = np.exp(x.data)
+        b = db = exp.sum(axis=dim, keepdims=True)
+        local = (da*b - db * a) / (b**2)
+        return local * gradient
     m = x - x.data.max(axis=dim, keepdims=True)
     e = m.exp()
-    res = e/e.sum(axis=dim, keepdim=True)
-    return res  # , backward
+    res = e/e.sum(dim=dim, keepdim=True)
+    return res, backward
 
 
 def log_softmax(x, dim=-1):
     # https://stackoverflow.com/questions/61567597/how-is-log-softmax-implemented-to-compute-its-value-and-gradient-with-better
-    # return softmax(x, dim=dim).log()
+    # return x.softmax(dim=dim).log()
     new_x = x - x.data.max(axis=dim, keepdims=True)
-    res = new_x - new_x.exp().sum(axis=dim, keepdim=True).log()
+    res = new_x - new_x.exp().sum(dim=dim, keepdim=True).log()
     return res
 
 
@@ -129,8 +130,8 @@ def conv2d_slow(
 
     # todo: subs padding
     def backward(gradient):
-        conv2d_backward_slow(gradient, padded, weight, bias,
-                             padding, stride, OH, OW, KH, KW, F)
+        return conv2d_backward_slow(gradient, padded, weight, bias,
+                                    padding, stride, OH, OW, KH, KW, F)
     for i in range(OH):
         for j in range(OW):
             h_index = i*stride1
@@ -189,9 +190,7 @@ def conv2d_backward_slow(gradient, padded, weight, bias, pad, stride, OH, OW, KH
            dweight, db, F, OH, OW, stride[0], stride[1], KH, KW)
 
     dx = dpadded[..., pad1:end(pad1), pad2:end(pad2)]
-    pass_gradient(padded, dx)
-    pass_gradient(weight, dweight)
-    pass_gradient(bias, db)
+    return dx, dweight, db
 
 
 def im2col(A, B, skip):
@@ -247,8 +246,8 @@ def conv2d(
     # out = (np.empty((N, F, OH, OW), dtype=np.float32))
 
     def backward(gradient):
-        conv2d_backward_slow(gradient, padded, weight, bias,
-                             padding, stride, OH, OW, KH, KW, F)
+        return conv2d_backward_slow(gradient, padded, weight, bias,
+                                    padding, stride, OH, OW, KH, KW, F)
     col = im2col(padded.data, (KH, KW), skip=stride)
     out = weight.data.reshape(
         weight.shape[0], -1) @ col + bias.data[..., None]
@@ -289,9 +288,7 @@ def conv2d_fast(
         grad_weight = torch.nn.grad.conv2d_weight(
             torch.from_numpy(input.data), tuple(weight.shape), torch.from_numpy(gradient))
 
-        pass_gradient(input, grad_input.numpy())
-        pass_gradient(weight, grad_weight.numpy())
-        pass_gradient(bias, np.zeros_like(bias.data))
+        return grad_input.numpy(), grad_weight.numpy(), np.zeros_like(bias.data)
         # pass_gradient(bias, db)
     out = weight.data.reshape(
         weight.shape[0], -1) @ im2col(padded.data, (KH, KW), skip=stride) + bias.data.reshape(1, -1, 1)
@@ -305,29 +302,32 @@ def add(x, other):
     res = _bin_op(np.add, x, other)
 
     def backward(gradient):
-        add_backward(gradient, x, other)
+        return add_backward(gradient, x, other)
     return res, backward
 
 
 def add_backward(gradient, x, other):
     from ._tensor import Tensor
+    grads = []
     for var in [x, other]:
         new_grad = gradient
         if isinstance(var, Tensor) and var.shape != new_grad.shape:
             new_grad = correct_shape(var.data, new_grad)
-        pass_gradient(var, new_grad)
+        grads.append(new_grad)
+    return tuple(grads)
 
 
 @differentiable_function(2)
 def sub(x, other):
     def backward(gradient):
         from ._tensor import Tensor
-
+        grads = []
         new_grad = gradient
         for var, M in zip([x, other], [1, -1]):
             if isinstance(gradient, Tensor) and isinstance(var, Tensor) and var.shape != gradient.shape:
                 new_grad = correct_shape(var.data, gradient)
-            pass_gradient(var, M*new_grad)
+            grads.append(M*new_grad)
+        return tuple(grads)
     return _bin_op(np.subtract, x, other), backward
 
 
@@ -339,22 +339,18 @@ def data_or_self(x):
 @differentiable_function(2)
 def mul(x, other):
     def backward(gradient):
-        pass_gradient(x, data_or_self(other) * gradient)
-        pass_gradient(other, data_or_self(x) * gradient)
+        return data_or_self(other) * gradient, data_or_self(x) * gradient
     return _bin_op(np.multiply, x, other), backward
 
 
 @differentiable_function(2)
 def pow(x, other):
     def backward(gradient):
-        nonlocal x
-        a = x.data
-        b = other
-        from src import Tensor
-        if isinstance(b, Tensor):
-            b = b.data
-        pass_gradient(x, b * (a ** (b-1)) * gradient)
-        pass_gradient(other, (a ** b)*np.log(a) * gradient)
+        a = data_or_self(x)
+        b = data_or_self(other)
+        dx = b * (a ** (b-1)) * gradient
+        dother = (a ** b)*np.log(a) * gradient
+        return dx, dother
     return _bin_op(np.power, x, other), backward
 
 
@@ -390,8 +386,9 @@ def truediv(x, other):
         gradient2 = -1*(data_or_self(x)/(data_or_self(other)**2))*gradient
         if isinstance(gradient2, np.ndarray) and isinstance(other, np.ndarray) and other.shape != gradient2.shape:
             gradient2 = correct_shape(other.data, gradient2)
-        pass_gradient(x, 1/data_or_self(other) * gradient)
-        pass_gradient(other, gradient2)
+        dx = 1/data_or_self(other) * gradient
+        dother = gradient2
+        return dx, dother
     return _bin_op(np.divide, x, other), backward
 
 
@@ -404,8 +401,9 @@ def rtruediv(x, other):
         from ._tensor import Tensor
         if isinstance(gradient2, Tensor) and isinstance(other, Tensor) and other.shape != gradient2.shape:
             gradient2 = correct_shape(other.data, gradient2)
-        pass_gradient(x, np.array(1/data_or_self(other) * gradient), )
-        pass_gradient(other, gradient2, )
+        dx = np.array(1/data_or_self(other) * gradient)
+        dother = gradient2
+        return dx, dother
     return _bin_op(np.divide, x, other), backward
 
 
@@ -414,30 +412,29 @@ def neg(x):
 
 
 @differentiable_function()
-def mean(x: Tensor, axis=None, keepdim=False):
+def mean(x: Tensor, dim=None, keepdim=False):
     gradient_shape = list(x.shape)
 
     def backward(gradient):
-        if (axis is not None) and (gradient.shape != () and gradient.shape != x.shape):
-            gradient_shape[axis] = 1
+        if (dim is not None) and (gradient.shape != () and gradient.shape != x.shape):
+            gradient_shape[dim] = 1
             gradient = gradient.reshape(*gradient_shape)
-        size = x.size if axis is None else x.shape[axis]
+        size = x.size if dim is None else x.shape[dim]
         lg = np.ones(x.shape) / size
-
-        pass_gradient(x, np.array(lg * gradient))
-    return _unary_op(np.mean, x, axis=axis, keepdims=keepdim), backward
+        return np.array(lg * gradient)
+    return _unary_op(np.mean, x, axis=dim, keepdims=keepdim), backward
 
 
 @differentiable_function()
-def sum(x, axis=None, keepdim=False):
-    res = _unary_op(np.sum, x, axis=axis, keepdims=keepdim)
+def sum(x, dim=None, keepdim=False):
+    res = _unary_op(np.sum, x, axis=dim, keepdims=keepdim)
 
     def backward(gradient):
-        if (axis is not None) and (gradient.shape != () and gradient.shape != x.shape):
+        if (dim is not None) and (gradient.shape != () and gradient.shape != x.shape):
             gradient_shape = list(x.shape)
-            gradient_shape[axis] = 1
+            gradient_shape[dim] = 1
             gradient = gradient.reshape(*gradient_shape)
-        pass_gradient(x, np.ones(x.shape) * gradient)
+        return np.ones(x.shape) * gradient
     return res, backward
 
 
@@ -446,14 +443,14 @@ def exp(x):
     res = _unary_op(np.exp, x)
 
     def backward(gradient):
-        pass_gradient(x, res.data * gradient)
+        return res.data * gradient
     return res, backward
 
 
 @differentiable_function()
 def log(x):
     def backward(gradient):
-        pass_gradient(x, 1/x.data * gradient)
+        return 1/x.data * gradient
     return _unary_op(np.log, x), backward
 
 
@@ -493,3 +490,21 @@ class other_ops:
     dropout = None  # dropout
     squeeze = None  # squeeze
     unsqueeze = None  # unsqueeze
+
+
+class _TensorOps(unary_ops, reduction_ops, bin_ops, other_ops):
+    __add__ = add
+    __sub__ = sub
+    __mul__ = mul
+    __pow__ = pow
+    __div__ = truediv
+    __truediv__ = truediv
+    __rtruediv__ = rtruediv
+    __matmul__ = matmul
+    __neg__ = neg
+    __rmul__ = __mul__
+    __radd__ = __add__
+    __rsub__ = __sub__
+    __iadd__ = __add__
+    __isub__ = __sub__
+    __imul__ = __mul__

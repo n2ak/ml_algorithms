@@ -1,6 +1,5 @@
 import torch
 import torch.nn.functional as F
-import numpy as np
 from tests._utils import randn, randint, check
 
 
@@ -13,11 +12,11 @@ def test_unary():
         lambda x:x.relu(),
         lambda x:x.sigmoid(),
         lambda x:x/10,
-        # lambda x:x.softmax(-1),
+        lambda x:x.softmax(-1),
         # lambda x:x.log_softmax(-1),
     ]):
         print(i+1)
-        check(op, randn(10, 10),)
+        check(op, randn(3, 3),)
 
 
 def test_binary():
@@ -35,7 +34,7 @@ def test_binary():
 
 
 def test_reduction():
-    from src import reduction_ops
+    from src.ops import reduction_ops
     for op, t_op in [
         (reduction_ops.sum, torch.sum),
         (reduction_ops.mean, torch.mean),
@@ -43,15 +42,15 @@ def test_reduction():
         for keepdim in [False, True]:
             print(op.__name__, "keepdim:", keepdim)
             check(op, randn(10, 10), torch_func=t_op)
-            check(lambda x: op(x, axis=1), randn(10, 10),
+            check(lambda x: op(x, dim=1), randn(10, 10),
                   torch_func=lambda x: t_op(x, dim=1))
             check(lambda x: op(
-                x, axis=0, keepdim=keepdim), randn(10, 10),
+                x, dim=0, keepdim=keepdim), randn(10, 10),
                 torch_func=lambda x: t_op(x, dim=0, keepdim=keepdim))
 
 
 def test_other():
-    from src import other_ops
+    from src.ops import other_ops
     for i, func in enumerate([
         lambda x: x.flatten(),
         lambda x: x.flatten(1),
@@ -91,3 +90,12 @@ def test_losses():
     x, t = randn(9, 5), randint(0, 4, (9), requires_grad=False)
     check(loss.cross_entropy, x, t,
           torch_func=lambda x, b: F.cross_entropy(x, b.long()))
+
+
+def test_complex():
+    for func, inputs in [
+        ((lambda x, b, c: (x+b)*c), (randn(10, 10), randn(10, 10), randn(10, 10))),
+        ((lambda x, b, c: (x/b)**c), (randn(10, 10), randn(10, 10), randn(10, 10))),
+        ((lambda x: x.log().exp()), (randn(10, 10),)),
+    ]:
+        check(func, *inputs)  # , atol=1e-3, rtol=1e-3)
