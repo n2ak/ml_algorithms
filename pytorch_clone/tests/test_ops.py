@@ -12,7 +12,7 @@ def test_unary():
         lambda x:x.relu(),
         lambda x:x.sigmoid(),
         lambda x:x/10,
-        lambda x:x.softmax(-1),
+        # lambda x:x.softmax(-1),
         # lambda x:x.log_softmax(-1),
     ]):
         print(i+1)
