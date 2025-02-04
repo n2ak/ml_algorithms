@@ -24,7 +24,8 @@ def cross_entropy(x: Tensor, t, dim=-1, reduction="mean") -> Tensor:
 
 
 @differentiable_function(1)
-def negative_log_likelihood(x, tt, reduction="mean"):
+def negative_log_likelihood(x: Tensor, tt: Tensor, reduction="mean"):
+    """`x` is typically a result of `x = logits.log_softmax()`"""
     assert is_tensor(x)
     assert is_tensor(tt)
     assert np.all(x.data <= 0), x.data <= 0
@@ -33,7 +34,7 @@ def negative_log_likelihood(x, tt, reduction="mean"):
         len_ = len(t)
         y = Tensor.zeros((x.shape))
         y.data[list(range(len_)), tt.numpy().astype(int)] = -(1/len_)
-        pass_gradient(x, y * gradient)
+        pass_gradient(x, y.data * gradient)
 
     t = tt.data.astype(int)
     y = Tensor.zeros((len(t), x.shape[-1]))

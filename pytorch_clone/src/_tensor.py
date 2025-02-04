@@ -1,5 +1,5 @@
 import numpy as np
-from .ops import ops
+from .ops import bin_ops, unary_ops, other_ops, reduction_ops
 
 
 def is_tensor(x):
@@ -15,15 +15,15 @@ class Tensor:
     def ndim(self): return self.data.ndim
     @property
     def dtype(self): return self.data.dtype
-    __add__ = ops.add
-    __sub__ = ops.sub
-    __mul__ = ops.mul
-    __pow__ = ops.pow
-    __div__ = ops.truediv
-    __truediv__ = ops.truediv
-    __rtruediv__ = ops.rtruediv
-    __matmul__ = ops.matmul
-    __neg__ = ops.neg
+    __add__ = bin_ops.add
+    __sub__ = bin_ops.sub
+    __mul__ = bin_ops.mul
+    __pow__ = bin_ops.pow
+    __div__ = bin_ops.truediv
+    __truediv__ = bin_ops.truediv
+    __rtruediv__ = bin_ops.rtruediv
+    __matmul__ = bin_ops.matmul
+    __neg__ = unary_ops.neg
 
     __rmul__ = __mul__
     __radd__ = __add__
@@ -32,27 +32,27 @@ class Tensor:
     __isub__ = __sub__
     __imul__ = __mul__
 
-    mean = ops.mean
-    sum = ops.sum
-    log = ops.log
-    exp = ops.exp
+    mean = reduction_ops.mean
+    sum = reduction_ops.sum
+    log = unary_ops.log
+    exp = unary_ops.exp
 
     # ------------activations--------------
-    tanh = ops.tanh
-    relu = ops.relu
-    sigmoid = ops.sigmoid
-    softmax = ops.softmax
-    log_softmax = ops.log_softmax
-    # ------------loss--------------
-    linear = ops.linear
-    conv2d = ops.conv2d
-    conv2d_slow = ops.conv2d_slow
-    conv2d_fast = ops.conv2d_fast
-    dropout = ops.dropout
-    flatten = ops.flatten
-    reshape = ops.reshape
-    squeeze = ops.squeeze
-    unsqueeze = ops.unsqueeze
+    tanh = unary_ops.tanh
+    relu = unary_ops.relu
+    sigmoid = unary_ops.sigmoid
+    softmax = unary_ops.softmax
+    log_softmax = unary_ops.log_softmax
+    # ------------other--------------
+    linear = other_ops.linear
+    conv2d = other_ops.conv2d
+    conv2d_slow = other_ops.conv2d_slow
+    conv2d_fast = other_ops.conv2d_fast
+    dropout = other_ops.dropout
+    flatten = other_ops.flatten
+    reshape = other_ops.reshape
+    squeeze = other_ops.squeeze
+    unsqueeze = other_ops.unsqueeze
 
     def __init__(self, data, requires_grad=False) -> None:
         if not isinstance(data, np.ndarray):
@@ -83,8 +83,15 @@ class Tensor:
     def shape(self): return self.data.shape
 
     @staticmethod
-    def normal(shape):
-        return Tensor(np.random.normal(0, 1, shape))
+    def normal(shape, loc=0, scale=1):
+        return Tensor(np.random.normal(loc, scale, shape))
+
+    @staticmethod
+    def randn(*shape):
+        return Tensor(np.random.randn(*shape))
+
+    def numpy(self):
+        return self.data.copy()
 
     from functools import partialmethod
 

@@ -67,19 +67,26 @@ def relu(tensor):
     return x, backward
 
 
+@differentiable_function()
 def sigmoid(t):
-    return 1 / ((-t).exp() + 1)
+    def backward(gradient):
+        # dsig(x) = sig(x) * (1 - sig(x))
+        local_g = res.data
+        local_g = local_g * (1 - local_g)
+        pass_gradient(t, local_g * gradient)
+    res = 1 / ((-t).exp() + 1)
+    return res, backward
 
 
-def softmax(x, dim: int = -1):
+# @differentiable_function()
+def softmax(x: Tensor, dim: int = -1):
+    def backward(gradient):
+        g = res.data * (1 - res.data)
+        pass_gradient(x, g*gradient)
     m = x - x.data.max(axis=dim, keepdims=True)
     e = m.exp()
-    ss = e.sum(axis=dim, keepdim=True)
-    return e/ss
-    # avoids overflow , https://timvieira.github.io/blog/post/2014/02/11/exp-normalize-trick/
-    x = (x - x.data.max()).exp()
-    x = x/x.sum(axis=dim, keepdim=True)
-    return x
+    res = e/e.sum(axis=dim, keepdim=True)
+    return res  # , backward
 
 
 def log_softmax(x, dim=-1):
@@ -104,6 +111,8 @@ def conv2d_slow(
     padding=(0, 0),
     stride=(1, 1),
 ):
+    """conv2d slow forward/slow backward"""
+
     # TODO: add strides
     from ._tensor import Tensor
     (N, C, H, W) = input.shape
@@ -223,6 +232,7 @@ def conv2d(
     padding=(0, 0),
     stride=(1, 1),
 ):
+    """conv2d fast forward/slow backward"""
     # TODO: add strides
     (N, C, H, W) = input.shape
     pad1, pad2 = padding
@@ -255,6 +265,7 @@ def conv2d_fast(
     padding=(0, 0),
     stride=(1, 1),
 ):
+    """fast conv2d"""
     # TODO: add strides
     pad1, pad2 = padding
     padded = input
@@ -397,16 +408,18 @@ def neg(x):
 
 
 @differentiable_function()
-def mean(x, axis=None):
+def mean(x: Tensor, axis=None, keepdim=False):
+    gradient_shape = list(x.shape)
+
     def backward(gradient):
         if (axis is not None) and (gradient.shape != () and gradient.shape != x.shape):
-            gradient_shape = list(x.shape)
             gradient_shape[axis] = 1
-            gradient = gradient.reshape(shape=gradient_shape)
-        lg = np.ones(x.shape) / x.size
+            gradient = gradient.reshape(*gradient_shape)
+        size = x.size if axis is None else x.shape[axis]
+        lg = np.ones(x.shape) / size
 
         pass_gradient(x, np.array(lg * gradient))
-    return _unary_op(np.mean, x, axis=axis), backward
+    return _unary_op(np.mean, x, axis=axis, keepdims=keepdim), backward
 
 
 @differentiable_function()
@@ -438,17 +451,8 @@ def log(x):
     return _unary_op(np.log, x), backward
 
 
-class ops:
-    add = add
-    sub = sub
-    mul = mul
-    pow = pow
-    truediv = truediv
-    rtruediv = rtruediv
-    matmul = matmul
+class unary_ops:
     neg = neg
-    mean = mean
-    sum = sum
     log = log
     exp = exp
     tanh = tanh
@@ -456,12 +460,30 @@ class ops:
     sigmoid = sigmoid
     softmax = softmax
     log_softmax = log_softmax
-    linear = linear
+
+
+class reduction_ops:
+    mean = mean
+    sum = sum
+
+
+class bin_ops:
+    add = add
+    sub = sub
+    mul = mul
+    pow = pow
+    truediv = truediv
+    rtruediv = rtruediv
+    matmul = matmul
+
+
+class other_ops:
     conv2d = conv2d
     conv2d_slow = conv2d_slow
     conv2d_fast = conv2d_fast
     flatten = flatten
     reshape = reshape
+    linear = linear
     dropout = None  # dropout
     squeeze = None  # squeeze
     unsqueeze = None  # unsqueeze
