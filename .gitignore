@@ -9,3 +9,4 @@ models
 old
 *.zip
 *.pt
+dummy*
