@@ -347,8 +347,14 @@ def mul(x, other):
 @differentiable_function(2)
 def pow(x, other):
     def backward(gradient):
-        pass_gradient(x, other * (x ** (other-1)) * gradient)
-        pass_gradient(other, (x ** other)*x.log() * gradient)
+        nonlocal x
+        a = x.data
+        b = other
+        from src import Tensor
+        if isinstance(b, Tensor):
+            b = b.data
+        pass_gradient(x, b * (a ** (b-1)) * gradient)
+        pass_gradient(other, (a ** b)*np.log(a) * gradient)
     return _bin_op(np.power, x, other), backward
 
 

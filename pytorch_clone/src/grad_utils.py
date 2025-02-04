@@ -76,7 +76,8 @@ def _tensor_and_requires_grad(var):
 
 def pass_gradient(var, gradient):
     import numpy as np
-    assert isinstance(gradient, np.ndarray)
+    assert isinstance(
+        gradient, np.ndarray), f"Expcected gradient to be np.ndarray but found {type(gradient)}"
     if _tensor_and_requires_grad(var):
         # gradient's shape must mach the tensor's
         # assert var.shape == gradient.shape, f"Expected gradient of shape {gradient.shape} to match the tensor's shape {var.shape}"
