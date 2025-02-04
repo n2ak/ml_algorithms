@@ -4,12 +4,14 @@ import numpy as np
 from src.grad_utils import grad_check
 
 
-def randn(*shape, requires_grad=True) -> Tensor:
+def randn(*shape, requires_grad=True, seed=0) -> Tensor:
+    np.random.seed(seed)
     t = Tensor.randn(*shape).relu()+1  # for log
     return t.requires_grad_(val=requires_grad)
 
 
-def randint(min, max, shape, requires_grad=True) -> Tensor:
+def randint(min, max, shape, requires_grad=True, seed=0) -> Tensor:
+    np.random.seed(seed)
     t = Tensor(np.random.randint(min, max, shape))
     return t.requires_grad_(val=requires_grad)
 
