@@ -8,17 +8,17 @@ import numpy as np
 from .grad_utils import differentiable_function
 
 
-def _bin_op(func, x, y):
+def _bin_op(func, x, y) -> Tensor:
     from ._tensor import Tensor
     return Tensor(func(data_or_self(x), data_or_self(y)))
 
 
-def _unary_op(func, x, **kwargs):
+def _unary_op(func, x, **kwargs) -> Tensor:
     from ._tensor import Tensor
     return Tensor(func(x.data, **kwargs)).requires_grad_(x.requires_grad)
 
 
-def flatten(x: Tensor, start_dim=0, end_dim=-1):
+def flatten(x: Tensor, start_dim=0, end_dim=-1) -> Tensor:
     shape = x.shape
     if end_dim < 0:
         end_dim = len(shape)+end_dim
@@ -36,7 +36,7 @@ def matmul(x: Tensor, other) -> Tensor:
 
 
 @differentiable_function(1)
-def reshape(x, *shape):
+def reshape(x, *shape) -> Tensor:
     def backward(gradient: Tensor):
         gradient = gradient.reshape(*x.shape)
         return gradient
@@ -46,7 +46,7 @@ def reshape(x, *shape):
     return t, backward
 
 
-def linear(x, w, b):
+def linear(x, w, b) -> Tensor:
     assert x.shape[1] == w.shape[0]
     res = (x@w)
     if b is not None:
@@ -55,7 +55,7 @@ def linear(x, w, b):
 
 
 @differentiable_function()
-def relu(tensor):
+def relu(tensor) -> Tensor:
     x = tensor.copy()
     mask = x.data < 0
     x.data[mask] = 0
@@ -67,7 +67,7 @@ def relu(tensor):
 
 
 @differentiable_function()
-def sigmoid(t):
+def sigmoid(t) -> Tensor:
     def backward(gradient):
         # dsig(x) = sig(x) * (1 - sig(x))
         local_g = res.data
@@ -77,21 +77,18 @@ def sigmoid(t):
     return res, backward
 
 
-# @differentiable_function(1)
-def softmax(x: Tensor, dim: int = -1):
+@differentiable_function(1)
+def softmax(x: Tensor, dim: int = -1) -> Tensor:
     def backward(gradient):
-        a = da = exp = np.exp(x.data)
-        b = exp.sum(axis=dim, keepdims=True)
-        db = exp.sum(axis=dim, keepdims=True)
-        local = (da*b - db * a) / (b**2)
+        local = (1-res.data)*res.data
         return local * gradient
     m = x - x.data.max(axis=dim, keepdims=True)
     e = m.exp()
     res = e/e.sum(dim=dim, keepdim=True)
-    return res  # , backward
+    return res, backward
 
 
-def log_softmax(x, dim=-1):
+def log_softmax(x, dim=-1) -> Tensor:
     # https://stackoverflow.com/questions/61567597/how-is-log-softmax-implemented-to-compute-its-value-and-gradient-with-better
     # return x.softmax(dim=dim).log()
     new_x = x - x.data.max(axis=dim, keepdims=True)
@@ -99,7 +96,7 @@ def log_softmax(x, dim=-1):
     return res
 
 
-def tanh(x):
+def tanh(x) -> Tensor:
     a, b = x.exp(), (-x).exp()
     res = (a-b)/(a+b)
     return res
@@ -231,7 +228,7 @@ def conv2d(
     bias,
     padding=(0, 0),
     stride=(1, 1),
-):
+) -> Tensor:
     """conv2d fast forward/slow backward"""
     # TODO: add strides
     (N, C, H, W) = input.shape
@@ -264,7 +261,7 @@ def conv2d_fast(
     bias,
     padding=(0, 0),
     stride=(1, 1),
-):
+) -> Tensor:
     """fast conv2d"""
     # TODO: add strides
     pad1, pad2 = padding
@@ -299,7 +296,7 @@ def conv2d_fast(
 
 
 @differentiable_function(2)
-def add(x, other):
+def add(x, other) -> Tensor:
     res = _bin_op(np.add, x, other)
 
     def backward(gradient):
@@ -319,7 +316,7 @@ def add_backward(gradient, x, other):
 
 
 @differentiable_function(2)
-def sub(x, other):
+def sub(x, other) -> Tensor:
     def backward(gradient):
         from ._tensor import Tensor
         grads = []
@@ -338,14 +335,14 @@ def data_or_self(x):
 
 
 @differentiable_function(2)
-def mul(x, other):
+def mul(x, other) -> Tensor:
     def backward(gradient):
         return data_or_self(other) * gradient, data_or_self(x) * gradient
     return _bin_op(np.multiply, x, other), backward
 
 
 @differentiable_function(2)
-def pow(x, other):
+def pow(x, other) -> Tensor:
     def backward(gradient):
         a = data_or_self(x)
         b = data_or_self(other)
@@ -382,7 +379,7 @@ def correct_shape(origin, gradient: np.ndarray):
 
 
 @differentiable_function(2)
-def truediv(x, other):
+def truediv(x, other) -> Tensor:
     def backward(gradient):
         gradient2 = -1*(data_or_self(x)/(data_or_self(other)**2))*gradient
         if isinstance(gradient2, np.ndarray) and isinstance(other, np.ndarray) and other.shape != gradient2.shape:
@@ -394,7 +391,7 @@ def truediv(x, other):
 
 
 @differentiable_function(2)
-def rtruediv(x, other):
+def rtruediv(x, other) -> Tensor:
     x, other = other, x
 
     def backward(gradient):
@@ -408,12 +405,12 @@ def rtruediv(x, other):
     return _bin_op(np.divide, x, other), backward
 
 
-def neg(x):
+def neg(x) -> Tensor:
     return mul(x, -1)
 
 
 @differentiable_function()
-def mean(x: Tensor, dim=None, keepdim=False):
+def mean(x: Tensor, dim=None, keepdim=False) -> Tensor:
     gradient_shape = list(x.shape)
 
     def backward(gradient):
@@ -427,7 +424,7 @@ def mean(x: Tensor, dim=None, keepdim=False):
 
 
 @differentiable_function()
-def sum(x, dim=None, keepdim=False):
+def sum(x, dim=None, keepdim=False) -> Tensor:
     res = _unary_op(np.sum, x, axis=dim, keepdims=keepdim)
 
     def backward(gradient):
@@ -440,7 +437,7 @@ def sum(x, dim=None, keepdim=False):
 
 
 @differentiable_function()
-def exp(x):
+def exp(x) -> Tensor:
     res = _unary_op(np.exp, x)
 
     def backward(gradient):
@@ -449,7 +446,7 @@ def exp(x):
 
 
 @differentiable_function()
-def log(x):
+def log(x) -> Tensor:
     def backward(gradient):
         return 1/x.data * gradient
     return _unary_op(np.log, x), backward

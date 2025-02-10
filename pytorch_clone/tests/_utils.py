@@ -27,8 +27,9 @@ def compare_values(outputs, torch_outputs, rtol=1e-05, atol=1e-08):
         to = to.numpy()
         assert o.shape == to.shape
         if not np.allclose(o, to, rtol=rtol, atol=atol):
-            print("Nm", o.flatten()[:10])
-            print("An", to.flatten()[:10])
+            print("Output mismatch")
+            print("Custom", o.flatten()[:10])
+            print("Torch ", to.flatten()[:10])
             assert False
 
 
@@ -41,6 +42,7 @@ def check_outputs(func, *inputs: Tensor, torch_func=None):
     compare_values(outputs, torch_outputs)
 
 
-def check(func, *inputs, torch_func=None):
+def check(func, *inputs, torch_func=None, chech_grad=True):
     check_outputs(func, *inputs, torch_func=torch_func)
-    grad_check(func, *inputs,)
+    if chech_grad:
+        grad_check(func, *inputs,)

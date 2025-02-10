@@ -26,6 +26,7 @@ def _compare(n_grads, a_grads, rtol, atol):
     for i, ng, ag in zip(range(len(n_grads)), n_grads, a_grads):
         assert ng.shape == ag.shape
         if not np.allclose(ng, ag, rtol=rtol, atol=atol):
+            print("Gradient mismatch")
             print("Nm", ng.flatten()[:10])
             print("An", ag.flatten()[:10])
             raise ValueError(f"Input at {i}")
