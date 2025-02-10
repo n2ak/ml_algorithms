@@ -89,7 +89,7 @@ def test_losses():
     for reduction in reductions:
         x, t = randn(9, 5), randint(0, 4, (9), requires_grad=False)
         x = x.log_softmax(-1).requires_grad_()
-        print("nll", reduction, x.data.sum(), t.data.sum())
+        print("nll", reduction)
         check(
             lambda x, b: loss.negative_log_likelihood(
                 x, b, reduction=reduction),

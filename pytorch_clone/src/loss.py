@@ -39,7 +39,7 @@ def negative_log_likelihood(input: Tensor, target: Tensor, reduction="mean"):
     assert reduction in ["mean", "sum", "none"]
 
     def backward(gradient):
-        len_ = len(t)
+        len_ = len(indices)
         dx = np.zeros((input.shape))
         if reduction == "mean":
             v = 1 / len_
@@ -48,20 +48,17 @@ def negative_log_likelihood(input: Tensor, target: Tensor, reduction="mean"):
             gradient = gradient[:, None]
         elif reduction == "sum":
             v = 1
-        dx[list(range(len_)), t] = -v
+        dx[list(range(len_)), indices] = -v
         # a = dx * gradient
         # del gradient
         return dx * gradient
 
-    t = target.data.copy().astype(int)
-    y = np.zeros((len(t), input.shape[-1]))
-    y[list(range(len(t))), t] = 1
-
-    res = -(input*y).sum(dim=1)
+    indices = target.data.astype(int)  # true indices
+    res = input.data[list(range(len(indices))), indices] * -1
     if reduction == "mean":
         res = res.mean()
     elif reduction == "sum":
         res = res.sum()
     elif reduction == "none":
         pass
-    return res, backward
+    return Tensor(res), backward
