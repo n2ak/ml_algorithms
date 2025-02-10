@@ -82,14 +82,31 @@ def test_other():
 
 def test_losses():
     from src import loss
-    x, t = randn(9, 5), randint(0, 4, (9), requires_grad=False)
-    x = x.copy().log_softmax(-1).requires_grad_()
-    check(loss.negative_log_likelihood, x, t,
-          torch_func=lambda x, b: F.nll_loss(x, b.long()))
+    reductions = ["mean", "none", "sum"]
+    # strange bug happens when inititalization happens before loop
+    # x, t = randn(9, 5), randint(0, 4, (9), requires_grad=False)
+    # x = x.log_softmax(-1).requires_grad_()
+    for reduction in reductions:
+        x, t = randn(9, 5), randint(0, 4, (9), requires_grad=False)
+        x = x.log_softmax(-1).requires_grad_()
+        print("nll", reduction, x.data.sum(), t.data.sum())
+        check(
+            lambda x, b: loss.negative_log_likelihood(
+                x, b, reduction=reduction),
+            x, t,
+            torch_func=lambda x, b: F.nll_loss(
+                x, b.long(), reduction=reduction),
+        )
 
-    x, t = randn(9, 5), randint(0, 4, (9), requires_grad=False)
-    check(loss.cross_entropy, x, t,
-          torch_func=lambda x, b: F.cross_entropy(x, b.long()))
+    for reduction in reductions:
+        x, t = randn(9, 5), randint(0, 4, (9), requires_grad=False)
+        print("ce", reduction)
+        check(
+            lambda x, b: loss.cross_entropy(x, b, reduction=reduction),
+            x, t,
+            torch_func=lambda x, b: F.cross_entropy(
+                x, b.long(), reduction=reduction),
+        )
 
 
 def test_complex():
