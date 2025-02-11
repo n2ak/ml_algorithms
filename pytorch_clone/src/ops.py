@@ -77,7 +77,7 @@ def sigmoid(t) -> Tensor:
     return res, backward
 
 
-@differentiable_function(1)
+# @differentiable_function(1)
 def softmax(x: Tensor, dim: int = -1) -> Tensor:
     def backward(gradient):
         local = (1-res.data)*res.data
@@ -85,7 +85,7 @@ def softmax(x: Tensor, dim: int = -1) -> Tensor:
     m = x - x.data.max(axis=dim, keepdims=True)
     e = m.exp()
     res = e/e.sum(dim=dim, keepdim=True)
-    return res, backward
+    return res  # , backward
 
 
 def log_softmax(x, dim=-1) -> Tensor:
